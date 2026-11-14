@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Secure Boot
+Comment=Enroll the ediOS key for Secure Boot and show the status
+Comment[de]=ediOS-Schlüssel für Secure Boot eintragen und Zustand anzeigen
+Exec=edios-secureboot
+Icon=edios-secureboot
+Terminal=false
+Categories=System;Settings;
+Keywords=Secure;Boot;MOK;UEFI;BIOS;Key;
+Keywords[de]=Secure;Boot;MOK;UEFI;BIOS;Schlüssel;

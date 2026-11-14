@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=pulseaudio (von ediOS abgeschaltet)
+Exec=/bin/true
+NoDisplay=true
+Hidden=true
+X-GNOME-Autostart-enabled=false

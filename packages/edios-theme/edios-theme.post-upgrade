@@ -1,0 +1,5 @@
+#!/bin/sh
+# Desktop-Voreinstellungen (00-edios.ini aus dem Paket, 01-generated.ini vom ISO-Bau) zu /etc/dconf/db/local
+mkdir -p /etc/dconf/db
+dconf compile /etc/dconf/db/local /etc/edios/dconf-src || echo "edios-theme: dconf compile fehlgeschlagen" >&2
+exit 0

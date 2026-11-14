@@ -1,0 +1,9 @@
+# ediOS: Firewall-Ergaenzung zu Alpines /etc/nftables.nft (eingehend zu, ausgehend offen, kein SSH).
+# Zusaetzlich erlaubt: DHCPv4-Antworten und mDNS (damit Drucker im Netz gefunden werden).
+table inet filter {
+	chain input {
+		udp sport 67 udp dport 68 accept comment "DHCPv4-Antworten / DHCPv4 replies"
+		ip daddr 224.0.0.251 udp dport 5353 accept comment "mDNS (Drucker finden / find printers)"
+		ip6 daddr ff02::fb udp dport 5353 accept comment "mDNS IPv6"
+	}
+}

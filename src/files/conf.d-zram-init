@@ -1,0 +1,20 @@
+# ediOS: ein komprimiertes Swap-Geraet (zstd) mit etwa 50 % des Arbeitsspeichers
+# shellcheck disable=SC2034  # wird von /etc/init.d/zram-init gelesen
+load_on_start=yes
+unload_on_stop=yes
+num_devices=1
+
+type0=swap
+flag0=
+size0=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 2048 ))
+mlim0=
+back0=
+icmp0=
+idle0=
+wlim0=
+notr0=
+algo0=zstd
+para0=
+labl0=zram_swap
+uuid0=
+args0=

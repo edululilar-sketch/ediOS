@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=ediOS Audio
+Exec=/usr/libexec/edios-audio
+NoDisplay=true
+X-GNOME-Autostart-Phase=Initialization

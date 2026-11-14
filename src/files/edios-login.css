@@ -1,0 +1,68 @@
+
+/* ===== ediOS-Login: Anmelde- und Sperrbildschirm (angehaengt von edios-gdm-theme-apply) ===== */
+
+/* Hintergrund: ediOS-Wallpaper, beim Bau weichgezeichnet und abgedunkelt (liegt in dieser gresource) */
+#lockDialogGroup {
+  background: #0a0c18 url("resource:///org/gnome/shell/theme/edios-login-bg.jpg");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center; }
+
+/* Obere Leiste: schlank und durchsichtig */
+#panel.login-screen, #panel.unlock-screen {
+  background-color: transparent; }
+
+/* Avatar rund mit hellem Rand, Name gross und hell */
+.login-dialog .user-widget .user-icon,
+.unlock-dialog .user-widget .user-icon {
+  background-color: rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.30);
+  color: #ffffff; }
+
+.login-dialog .user-widget.vertical .user-widget-label,
+.unlock-dialog .user-widget.vertical .user-widget-label {
+  color: #ffffff;
+  font-size: 2.2em;
+  font-weight: 700;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55); }
+
+/* Passwortfeld: abgerundet und halbtransparent */
+.login-dialog .login-dialog-prompt-entry,
+.unlock-dialog .login-dialog-prompt-entry {
+  background-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 10px 18px; }
+.login-dialog .login-dialog-prompt-entry:hover,
+.unlock-dialog .login-dialog-prompt-entry:hover {
+  background-color: rgba(255, 255, 255, 0.20);
+  color: #ffffff; }
+.login-dialog .login-dialog-prompt-entry:focus,
+.unlock-dialog .login-dialog-prompt-entry:focus {
+  background-color: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.40) !important;
+  color: #ffffff; }
+.login-dialog .login-dialog-prompt-entry StLabel.hint-text,
+.unlock-dialog .login-dialog-prompt-entry StLabel.hint-text {
+  color: rgba(255, 255, 255, 0.65); }
+
+/* Benutzerliste und Knoepfe ebenfalls halbtransparent */
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item {
+  background-color: rgba(255, 255, 255, 0.10); }
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:hover {
+  background-color: rgba(255, 255, 255, 0.16); }
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:selected,
+.login-dialog-user-list-view .login-dialog-user-list .login-dialog-user-list-item:focus {
+  background-color: rgba(255, 255, 255, 0.20); }
+
+.login-dialog-button.a11y-button,
+.login-dialog-button.cancel-button,
+.login-dialog-button.switch-user-button,
+.login-dialog-button.login-dialog-session-list-button,
+.login-dialog-not-listed-button {
+  background-color: rgba(255, 255, 255, 0.12); }
+
+/* Logo: klein, ganz unten in der Mitte (Platz gibt GNOME fest vor, nie ueber dem Passwortfeld) */
+.login-dialog-logo-bin {
+  margin: 1.5em 0;
+  opacity: 0.85; }

@@ -1,0 +1,6 @@
+#!/bin/sh
+# D-Bus-Override nur entfernen, wenn er unveraendert ist
+src=/usr/share/edios/dbus/org.gnome.Terminal.service
+dst=/usr/local/share/dbus-1/services/org.gnome.Terminal.service
+cmp -s "$src" "$dst" 2>/dev/null && rm -f "$dst"
+exit 0

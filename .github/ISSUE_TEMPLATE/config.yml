@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Anleitung / Installation guide (Deutsch)
+    url: https://github.com/edululilar-sketch/ediOS/blob/main/docs/de/installation.md
+    about: Schritt für Schritt vom Download bis zum ersten Start.
+  - name: Installation guide (English)
+    url: https://github.com/edululilar-sketch/ediOS/blob/main/docs/en/installation.md
+    about: Step by step from the download to the first start.

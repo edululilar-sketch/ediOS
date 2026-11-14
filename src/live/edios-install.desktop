@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Install ediOS
+Name[de]=ediOS installieren
+Comment=Install ediOS on a hard disk or USB drive
+Comment[de]=ediOS auf eine Festplatte oder einen USB-Datenträger installieren
+Exec=/usr/bin/edios-install
+Icon=edios-install
+Terminal=false
+Categories=System;
+Keywords=Install;Installation;Disk;Installer;
+Keywords[de]=Installieren;Installation;Festplatte;Installer;
+StartupNotify=true

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ediOS Secure Boot hint
+Name[de]=ediOS Secure-Boot-Hinweis
+Comment=One-time hint on how to enroll the ediOS key for Secure Boot
+Comment[de]=Einmaliger Hinweis, wie der ediOS-Schlüssel für Secure Boot eingetragen wird
+Exec=/usr/bin/edios-secureboot --hinweis
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=20

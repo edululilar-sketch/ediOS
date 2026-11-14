@@ -1,0 +1,100 @@
+ediOS @VERSION@ - auf einen USB-Stick schreiben und starten
+==========================================================
+
+Datei:      @ISO@
+Pruefsumme: SHA256SUMS (SHA-256), signiert: SHA256SUMS.sig
+Anleitung mit Bildern: @URL@ (docs/de/installation.md)
+English: README.txt
+
+Was du brauchst
+---------------
+- einen USB-Stick mit mindestens 4 GB (ALLES darauf wird geloescht)
+- einen PC mit UEFI und mindestens 4 GB Arbeitsspeicher (8 GB empfohlen)
+- Windows: Rufus (https://rufus.ie) oder balenaEtcher (https://etcher.balena.io)
+
+Pruefsumme kontrollieren (empfohlen)
+------------------------------------
+Windows (PowerShell, im Download-Ordner):
+   Get-FileHash .\@ISO@ -Algorithm SHA256
+Linux/macOS:
+   sha256sum -c SHA256SUMS --ignore-missing
+Die angezeigte Zahl muss genau mit der in SHA256SUMS uebereinstimmen.
+
+Mit Rufus schreiben (GPT / UEFI)
+--------------------------------
+1. Stick einstecken, Rufus starten.
+2. "Laufwerk": den USB-Stick auswaehlen. Genau hinsehen, es darf keine Festplatte sein!
+3. "Startart": AUSWAHL klicken und @ISO@ waehlen.
+4. "Partitionsschema": GPT, "Zielsystem": UEFI (kein CSM).
+5. START klicken. Rufus fragt, wie das Abbild geschrieben werden soll:
+   "Im DD-Abbild-Modus schreiben" waehlen (empfohlen).
+   Klappt der Start nicht: noch einmal mit "Im ISO-Abbild-Modus schreiben" versuchen.
+6. Warnung "Alle Daten werden geloescht" mit OK bestaetigen, warten bis "FERTIG".
+
+balenaEtcher: "Flash from file" -> @ISO@ -> Stick waehlen -> "Flash!".
+Linux im Terminal:  sudo dd if=@ISO@ of=/dev/sdX bs=4M status=progress conv=fsync
+(/dev/sdX ist der Stick, NICHT die Festplatte - vorher mit lsblk pruefen.)
+
+Vom Stick starten
+-----------------
+- PC neu starten und das Boot-Menue oeffnen (je nach Hersteller F12, F11, F10, F8 oder Esc),
+  den USB-Stick waehlen ("UEFI: ..." bevorzugen).
+- Im ediOS-Startmenue "Deutsch" oder "English" waehlen.
+  "komplett in den RAM laden": ediOS wird beim Start in den Arbeitsspeicher kopiert, danach kann
+  der Stick abgezogen werden (braucht mindestens 8 GB RAM, sonst laeuft ediOS normal vom Stick).
+- Beim ersten Start fragt die Einrichtung nach Sprache, Tastatur, Zeitzone, Schrift und Dock.
+  Diese Auswahl uebernimmt der Installer ins installierte ediOS.
+
+Secure Boot
+-----------
+ediOS startet mit Secure Boot AN und AUS. Bei Secure Boot AN muss EINMAL pro PC der
+ediOS-Schluessel eingetragen werden (ediOS startet ueber "shim", den von Microsoft signierten
+Starter von Debian). Ist Secure Boot AUS, ist nichts zu tun.
+
+Weg A - Secure Boot ist AN (Schluessel direkt beim Start eintragen):
+ 1. Vom Stick starten. Zuerst erscheint "Verification failed: (0x1A) Security Violation".
+    Das ist beim ersten Mal richtig so. Mit Enter auf OK bestaetigen.
+ 2. Ein blauer Bildschirm "Shim UEFI key management" erscheint: eine Taste druecken.
+ 3. "Enroll key from disk" waehlen.
+ 4. Das Laufwerk waehlen (heisst meist "EDIOS"), dann die Datei "edios-mok.der".
+ 5. "Continue" waehlen, dann "Yes".
+ 6. "Reboot" waehlen. Jetzt startet ediOS mit Secure Boot.
+
+Weg B - Secure Boot ist AUS (Schluessel aus dem installierten ediOS eintragen):
+ 1. Programm "Secure Boot" in der App-Uebersicht oeffnen, "Schluessel eintragen".
+    Im Terminal geht es auch:  sudo mokutil --import /usr/share/edios/secureboot/edios-mok.der
+ 2. Ein Einmal-Passwort waehlen (nur Kleinbuchstaben a-x und Ziffern; im blauen
+    Bildschirm gilt die englische Tastatur, y und z sind dort vertauscht).
+ 3. Neu starten. Blauer Bildschirm "Shim UEFI key management": eine Taste druecken.
+ 4. "Enroll MOK" > "Continue" > "Yes" > Einmal-Passwort eingeben > "Reboot".
+ 5. Danach im UEFI-Setup (meist F2 oder Entf beim Start) Secure Boot einschalten.
+
+Der echte ediOS-Schluessel (im MOK-Manager "View key"):
+  Name "ediOS Secure Boot Signing Key (MOK) 2026-11", SHA-1 2F:82:45:17:37:35:8A:AB:BF:B1 ...
+Klappt es nicht: im Startmenue "ediOS-Schluessel eintragen" waehlen (Weg A ab Schritt 3)
+oder Secure Boot im UEFI-Setup ausschalten. Windows startet weiter ganz normal.
+
+Installieren
+------------
+Im Live-System "ediOS installieren" (erstes Symbol im Dock) starten. Der Installer zeigt jede Platte
+mit Groesse, Modell, Anschluss (USB/intern) und dem, was darauf gefunden wurde (z. B. Windows).
+ALLE Daten auf der gewaehlten Platte werden geloescht; zum Bestaetigen muss JA eingetippt werden.
+Der ediOS-Stick selbst wird nie angeboten. Ist eine Platte gerade geoeffnet (eingehaengt), haengt
+der Installer sie vorher aus.
+
+Dual-Boot mit Windows: am sichersten auf eine EXTERNE Platte (USB) installieren. Der Bootloader
+kommt nur auf diese Platte, Windows und die Boot-Reihenfolge des PCs bleiben unveraendert.
+Starten: Platte einstecken, Boot-Menue (F12/F11/Esc), die Platte waehlen.
+
+Nach der Installation
+---------------------
+- Updates: "ediOS aktualisieren" in der App-Uebersicht (Alpine- und ediOS-Pakete, Flatpak-Apps).
+- Apps wie Steam und Discord: "ediOS Apps" (Flathub).
+- Befehle aus Anleitungen im Internet mit "sudo" funktionieren (sudo leitet auf doas weiter).
+
+Bekannt
+-------
+- Secure Boot: Der Kernel bleibt auf der Version der ISO (er ist signiert). Kernel-Updates kommen
+  mit einer neuen ediOS-Version, alle anderen Updates wie gewohnt.
+- NVIDIA: nur der freie Treiber nouveau (kein proprietaerer NVIDIA-Treiber).
+- Fehler melden: @URL@/issues

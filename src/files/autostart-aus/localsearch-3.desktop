@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=localsearch-3 (von ediOS abgeschaltet)
+Exec=/bin/true
+NoDisplay=true
+Hidden=true
+X-GNOME-Autostart-enabled=false

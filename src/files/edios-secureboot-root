@@ -1,0 +1,29 @@
+#!/bin/sh
+# ediOS Secure Boot, root-Teil (per pkexec bzw. doas).
+#   edios-secureboot-root import     stdin: Passwort-Hash ($6$...), traegt den ediOS-Schluessel
+#                                    fuer den naechsten Start im MOK-Manager vor (mokutil --import)
+#   edios-secureboot-root revoke     Vormerkung zuruecknehmen
+set -eu
+DER=/usr/share/edios/secureboot/edios-mok.der
+[ "$(id -u)" = 0 ] || { echo "Muss als root laufen." >&2; exit 1; }
+[ -d /sys/firmware/efi ] || { echo "Dieser PC startet nicht per UEFI." >&2; exit 2; }
+[ -f "$DER" ] || { echo "ediOS-Schluessel fehlt ($DER)." >&2; exit 3; }
+[ -n "$(ls /sys/firmware/efi/efivars 2>/dev/null)" ] \
+	|| mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null || true
+
+case "${1:-}" in
+import)
+	IFS= read -r HASH
+	case "$HASH" in '$6$'*) ;; *) echo "Ungueltiger Passwort-Hash." >&2; exit 4 ;; esac
+	tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+	printf '%s' "$HASH" > "$tmp"
+	mokutil --revoke-import >/dev/null 2>&1 || true
+	mokutil --import "$DER" --hash-file "$tmp"
+	mokutil --list-new >/dev/null 2>&1 || { echo "Vormerkung nicht gespeichert." >&2; exit 5; }
+	;;
+revoke)
+	mokutil --revoke-import
+	;;
+*)
+	echo "usage: $0 import|revoke" >&2; exit 64 ;;
+esac

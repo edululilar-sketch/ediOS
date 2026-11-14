@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=ediOS Setup
+Name[de]=ediOS-Einrichtung
+Comment=Language, keyboard, time zone, font and dock position
+Comment[de]=Sprache, Tastatur, Zeitzone, Schriftart und Dock-Position einstellen
+Exec=/usr/bin/edios-einrichtung
+Icon=edios-einrichtung
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=Language;Keyboard;Timezone;Font;OpenDyslexic;Ubuntu;Adwaita;Dock;Welcome;Setup;
+Keywords[de]=Sprache;Tastatur;Zeitzone;Schrift;Schriftart;OpenDyslexic;Ubuntu;Adwaita;Dock;Leiste;Willkommen;Einrichtung;
+StartupNotify=true

@@ -1,0 +1,35 @@
+#!/sbin/openrc-run
+# ediOS Live-System: Sprache aus dem Bootmenue (edios.lang=de|en) setzen und den Live-Benutzer anlegen
+# (ohne Passwort, automatische Anmeldung ueber GDM). GPL-3.0-or-later
+# Nur im Live-System; der Installer entfernt diesen Dienst auf der Zielplatte.
+description="ediOS Live-System vorbereiten"
+
+depend() {
+	need localmount
+	after edios-toram
+	before gdm
+}
+
+start() {
+	LIVEUSER=edios
+	[ -r /etc/conf.d/liveuser ] && . /etc/conf.d/liveuser
+	if ! id "$LIVEUSER" >/dev/null 2>&1; then
+		ebegin "Lege Live-Benutzer $LIVEUSER an"
+		adduser -D -g "ediOS Live" -s /bin/bash "$LIVEUSER" >/dev/null
+		passwd -d "$LIVEUSER" >/dev/null 2>&1
+		for g in wheel audio video input netdev plugdev lp cdrom; do
+			grep -q "^$g:" /etc/group && addgroup "$LIVEUSER" "$g" >/dev/null 2>&1
+		done
+		eend 0
+	fi
+	# Sprache aus dem Bootmenue; Tastatur und Zeitzone passend vorschlagen (in der Einrichtung aenderbar)
+	lang=de
+	for o in $(cat /proc/cmdline); do
+		case "$o" in edios.lang=en) lang=en ;; edios.lang=de) lang=de ;; esac
+	done
+	if [ "$lang" = en ]; then kb=us; else kb=de; fi
+	ebegin "Sprache/Language: $lang"
+	/usr/libexec/edios-sprache-root set "$lang" "$kb" Europe/Berlin "$LIVEUSER" >/dev/null
+	eend $?
+	return 0
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to ediOS
+Name[de]=Willkommen bei ediOS
+Comment=Setup when you log in for the first time
+Comment[de]=Einrichtung beim ersten Anmelden
+Exec=/usr/bin/edios-einrichtung --willkommen
+Icon=edios-einrichtung
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3

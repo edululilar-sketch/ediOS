@@ -1,0 +1,3 @@
+#!/bin/sh
+# Alter Befehl: die Schrift wird in der ediOS-Einrichtung gewaehlt. GPL-3.0-or-later
+exec /usr/bin/edios-einrichtung "$@"

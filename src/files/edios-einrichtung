@@ -1,0 +1,543 @@
+#!/usr/bin/env python3
+# ediOS-Einrichtung / ediOS Setup (GPL-3.0-or-later)
+# Schritt 1 Sprache (+ Tastatur, Zeitzone), Schritt 2 Schrift, Schritt 3 Dock.
+#   edios-einrichtung              -> Fenster oeffnen (App-Uebersicht)
+#   edios-einrichtung --willkommen -> Autostart: Live-System bis "Fertig"; installiert nur einmal
+# Merker in ~/.config/edios/:
+#   einrichtung-erledigt   "Fertig" wurde gedrueckt (der Installer uebernimmt ihn ins installierte System)
+#   einrichtung-angezeigt  im installierten System schon einmal von selbst gezeigt
+#   einrichtung-schritt    nach einem Sprachwechsel hier weitermachen
+import os
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+APP_ID = "org.edios.Einrichtung"
+CONF_DIR = os.path.join(GLib.get_user_config_dir(), "edios")
+STAMP_DONE = os.path.join(CONF_DIR, "einrichtung-erledigt")
+STAMP_SHOWN = os.path.join(CONF_DIR, "einrichtung-angezeigt")
+STAMP_STEP = os.path.join(CONF_DIR, "einrichtung-schritt")
+LIVE = os.path.exists("/etc/conf.d/liveuser")
+ROOT_HELPER = "/usr/libexec/edios-sprache-root"
+
+
+def sys_lang():
+    for v in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        x = os.environ.get(v, "")
+        if x and not x.startswith(("C.", "POSIX")) and x != "C":
+            return "de" if x.startswith("de") else "en"
+    return "de"
+
+
+L = sys_lang()
+
+
+def T(de, en):
+    return de if L == "de" else en
+
+
+# (Schluessel, Anzeigename de, en, Familie, Groesse, Beschreibung de, en)
+FONTS = [
+    ("opendyslexic", "OpenDyslexic", "OpenDyslexic", "OpenDyslexic", 9,
+     "Für Menschen mit Legasthenie: Buchstaben sind unten schwerer und schwerer zu verwechseln.",
+     "For people with dyslexia: letters are heavier at the bottom and harder to mix up."),
+    ("adwaita", "GNOME-Standard (Adwaita Sans)", "GNOME default (Adwaita Sans)", "Adwaita Sans", 11,
+     "Die normale Schrift von GNOME: klar und modern.",
+     "The normal GNOME font: clear and modern."),
+    ("ubuntu", "Ubuntu-Schrift", "Ubuntu font", "Ubuntu", 11,
+     "Rund und freundlich.",
+     "Round and friendly."),
+]
+DOCK = [("LEFT", "Links", "Left"), ("BOTTOM", "Unten", "Bottom"), ("RIGHT", "Rechts", "Right")]
+DOCK_SCHEMA = "org.gnome.shell.extensions.dash-to-dock"
+PREVIEW = {"de": "Franz jagt im komplett verwahrlosten Taxi quer durch Bayern.\nÄ Ö Ü ß  –  0 1 2 3 4 5 6 7 8 9",
+           "en": "The quick brown fox jumps over the lazy dog.\nÄ Ö Ü ß  –  0 1 2 3 4 5 6 7 8 9"}
+# xkb-Name, Anzeige de, en
+KEYBOARDS = [
+    ("de", "Deutsch", "German"),
+    ("ch", "Deutsch (Schweiz)", "German (Switzerland)"),
+    ("at", "Deutsch (Österreich)", "German (Austria)"),
+    ("us", "Englisch (USA)", "English (US)"),
+    ("us+intl", "Englisch (USA, international)", "English (US, international)"),
+    ("gb", "Englisch (Großbritannien)", "English (UK)"),
+    ("fr", "Französisch", "French"),
+    ("es", "Spanisch", "Spanish"),
+    ("it", "Italienisch", "Italian"),
+    ("nl", "Niederländisch", "Dutch"),
+    ("pl", "Polnisch", "Polish"),
+    ("tr", "Türkisch", "Turkish"),
+]
+SUGGEST = {"de": ("de", "Europe/Berlin"), "en": ("us", None)}   # None = Zeitzone so lassen
+
+CSS = """
+.edios-preview { padding: 18px; border-radius: 12px; }
+.lang-choice { padding: 18px 12px; min-height: 96px; border-radius: 16px; }
+.lang-choice label.lang-name { font-size: 22pt; font-weight: 800; }
+.lang-choice:checked { background: alpha(@accent_bg_color, 0.18); box-shadow: inset 0 0 0 3px @accent_bg_color; }
+.mini-screen { background: linear-gradient(135deg, #4f6dff, #8b5cf6); border-radius: 6px;
+               min-width: 112px; min-height: 70px; }
+.mini-dock { background: alpha(#1b1830, 0.85); border-radius: 3px; }
+.mini-dock-v { min-width: 12px; margin: 6px 3px; }
+.mini-dock-h { min-height: 12px; margin: 3px 14px; }
+.dock-choice { padding: 10px; }
+.dock-choice:checked { background: alpha(@accent_bg_color, 0.18); box-shadow: inset 0 0 0 2px @accent_bg_color; }
+"""
+
+
+def schema(sid):
+    src = Gio.SettingsSchemaSource.get_default()
+    return src.lookup(sid, True) if src else None
+
+
+def read_stamp(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def write_stamp(path, text):
+    try:
+        os.makedirs(CONF_DIR, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text + "\n")
+    except OSError:
+        pass
+
+
+def remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def current_system():
+    try:
+        out = subprocess.run([ROOT_HELPER, "zeigen"], capture_output=True, text=True, timeout=5).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        out = []
+    if len(out) == 3:
+        return out[0], out[1], out[2]
+    return L, "de", "Europe/Berlin"
+
+
+def timezones():
+    zones = set()
+    for tab in ("/usr/share/zoneinfo/zone1970.tab", "/usr/share/zoneinfo/zone.tab"):
+        try:
+            with open(tab) as f:
+                for line in f:
+                    if line.startswith("#"):
+                        continue
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        zones.add(parts[2].strip())
+        except OSError:
+            continue
+    zones.add("UTC")
+    return sorted(z for z in zones if os.path.exists("/usr/share/zoneinfo/" + z))
+
+
+def run_root(args):
+    """Root-Helfer: im Live-System per doas (ohne Passwort), sonst per pkexec (Passwortfenster)."""
+    if LIVE and subprocess.run(["doas", "-n", "true"], capture_output=True).returncode == 0:
+        cmd = ["doas", "-n", ROOT_HELPER] + args
+    else:
+        cmd = ["pkexec", ROOT_HELPER] + args
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, str(e)
+
+
+class Einrichtung(Adw.ApplicationWindow):
+    def __init__(self, app, welcome, start_step):
+        super().__init__(application=app, title=T("ediOS-Einrichtung", "ediOS Setup"))
+        self.welcome = welcome
+        self.set_default_size(660, 760)
+        self.iface = Gio.Settings.new("org.gnome.desktop.interface")
+        self.wm = Gio.Settings.new("org.gnome.desktop.wm.preferences")
+        self.inputs = Gio.Settings.new("org.gnome.desktop.input-sources")
+        self.dock = Gio.Settings.new(DOCK_SCHEMA) if schema(DOCK_SCHEMA) else None
+        self.sys_lang, self.sys_kb, self.sys_tz = current_system()
+        self.lang, self.kb, self.tz = self.sys_lang, self.sys_kb, self.sys_tz
+        self.zones = timezones()
+        if self.tz not in self.zones:
+            self.zones.insert(0, self.tz)
+        self.step = start_step
+        self.toasts = Adw.ToastOverlay()
+        self.set_content(self.toasts)
+        self.build()
+
+    # ---------- Aufbau (wird nach einem Sprachwechsel neu gebaut) ----------
+    def build(self):
+        tv = Adw.ToolbarView()
+        hb = Adw.HeaderBar()
+        self.back = Gtk.Button(icon_name="go-previous-symbolic", tooltip_text=T("Zurück", "Back"))
+        self.back.connect("clicked", lambda *_: self.go(self.step - 1))
+        hb.pack_start(self.back)
+        tv.add_top_bar(hb)
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self.stack.add_named(self.page_language(), "1")
+        self.stack.add_named(self.page_font(), "2")
+        self.stack.add_named(self.page_dock(), "3")
+        tv.set_content(self.stack)
+        self.toasts.set_child(tv)
+        self.set_title(T("ediOS-Einrichtung", "ediOS Setup"))
+        self.go(self.step, animate=False)
+
+    def go(self, step, animate=True):
+        step = max(1, min(3, step))
+        self.step = step
+        self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT if animate
+                                       else Gtk.StackTransitionType.NONE)
+        self.stack.set_visible_child_name(str(step))
+        self.back.set_visible(step > 1)
+
+    def header(self, page, title, text, icon="edios-logo", size=96):
+        g = Adw.PreferencesGroup()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
+        img = Gtk.Image.new_from_icon_name(icon)
+        img.set_pixel_size(size)
+        img.set_halign(Gtk.Align.CENTER)
+        box.append(img)
+        t = Gtk.Label(label=title, justify=Gtk.Justification.CENTER, wrap=True)
+        t.add_css_class("title-1")
+        box.append(t)
+        if text:
+            d = Gtk.Label(label=text, wrap=True, justify=Gtk.Justification.CENTER)
+            d.add_css_class("dim-label")
+            box.append(d)
+        g.add(box)
+        page.add(g)
+
+    def next_button(self, page, label, cb):
+        b = Gtk.Button(label=label, halign=Gtk.Align.CENTER, margin_top=12)
+        b.add_css_class("suggested-action")
+        b.add_css_class("pill")
+        b.connect("clicked", cb)
+        g = Adw.PreferencesGroup()
+        g.add(b)
+        page.add(g)
+        return b
+
+    # ---------- Schritt 1: Sprache ----------
+    def page_language(self):
+        page = Adw.PreferencesPage()
+        self.header(page, "Willkommen bei ediOS\nWelcome to ediOS" if self.welcome else T("Sprache", "Language"),
+                    "Wähle deine Sprache · Choose your language", size=96)
+        g = Adw.PreferencesGroup()
+        hbox = Gtk.Box(spacing=12, homogeneous=True)
+        first = None
+        for code, name, sub in (("de", "Deutsch", "Deutschland, Österreich, Schweiz"),
+                                ("en", "English", "International")):
+            b = Gtk.ToggleButton()
+            b.add_css_class("lang-choice")
+            inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER)
+            n = Gtk.Label(label=name)
+            n.add_css_class("lang-name")
+            s = Gtk.Label(label=sub)
+            s.add_css_class("dim-label")
+            inner.append(n)
+            inner.append(s)
+            b.set_child(inner)
+            if first:
+                b.set_group(first)
+            else:
+                first = b
+            b.set_active(self.lang == code)
+            b.connect("toggled", self.on_lang, code)
+            hbox.append(b)
+        g.add(hbox)
+        page.add(g)
+
+        g2 = Adw.PreferencesGroup(title=T("Tastatur und Zeitzone", "Keyboard and time zone"),
+                                  description=T("Passend zur Sprache vorgeschlagen. Du kannst beides ändern.",
+                                                "Suggested to match the language. You can change both."))
+        self.kb_row = Adw.ComboRow(title=T("Tastatur", "Keyboard"))
+        self.kb_codes = [k[0] for k in KEYBOARDS]
+        if self.kb not in self.kb_codes:
+            KEYBOARDS.append((self.kb, self.kb, self.kb))
+            self.kb_codes.append(self.kb)
+        self.kb_row.set_model(Gtk.StringList.new([T(k[1], k[2]) for k in KEYBOARDS]))
+        self.kb_row.set_selected(self.kb_codes.index(self.kb))
+        self.kb_row.connect("notify::selected", self.on_kb)
+        g2.add(self.kb_row)
+        self.tz_row = Adw.ComboRow(title=T("Zeitzone", "Time zone"))
+        self.tz_row.set_model(Gtk.StringList.new(self.zones))
+        self.tz_row.set_enable_search(True)
+        self.tz_row.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        self.tz_row.set_selected(self.zones.index(self.tz))
+        self.tz_row.connect("notify::selected", self.on_tz)
+        g2.add(self.tz_row)
+        test = Adw.EntryRow(title=T("Hier kannst du die Tastatur ausprobieren", "Try your keyboard here"))
+        g2.add(test)
+        page.add(g2)
+        self.lang_next = self.next_button(page, T("Weiter", "Continue"), self.on_lang_next)
+        return page
+
+    def on_lang(self, btn, code):
+        global L
+        if not btn.get_active() or code == self.lang:
+            return
+        self.lang = code
+        kb, tz = SUGGEST[code]
+        self.kb = kb
+        if tz:
+            self.tz = tz
+        L = code
+        self.build()            # Texte sofort in der gewaehlten Sprache
+
+    def on_kb(self, row, _p):
+        i = row.get_selected()
+        if 0 <= i < len(self.kb_codes):
+            self.kb = self.kb_codes[i]
+            # gleich ausprobieren: Tastatur der Sitzung sofort umstellen
+            self.inputs.set_value("sources", GLib.Variant("a(ss)", [("xkb", self.kb)]))
+
+    def on_tz(self, row, _p):
+        i = row.get_selected()
+        if 0 <= i < len(self.zones):
+            self.tz = self.zones[i]
+
+    def on_lang_next(self, btn):
+        self.inputs.set_value("sources", GLib.Variant("a(ss)", [("xkb", self.kb)]))
+        Gio.Settings.sync()
+        if (self.lang, self.kb, self.tz) == (self.sys_lang, self.sys_kb, self.sys_tz):
+            self.go(2)
+            return
+        btn.set_sensitive(False)
+        user = GLib.get_user_name()
+        rc, out = run_root(["set", self.lang, self.kb, self.tz, user])
+        btn.set_sensitive(True)
+        if rc != 0:
+            if rc in (126, 127):        # Passwortfenster abgebrochen / nicht erlaubt
+                self.toast(T("Nicht geändert: Dafür wird das Administrator-Passwort gebraucht.",
+                             "Not changed: the administrator password is needed for this."))
+            else:
+                self.toast(T("Das hat nicht geklappt: ", "That did not work: ") + out[-200:])
+            return
+        changed_lang = self.lang != self.sys_lang
+        self.sys_lang, self.sys_kb, self.sys_tz = self.lang, self.kb, self.tz
+        if not changed_lang:
+            self.go(2)
+            return
+        # GNOME uebernimmt eine neue Sprache erst mit einer neuen Sitzung
+        write_stamp(STAMP_STEP, "2")
+        if LIVE:
+            self.wait_page(T("Die Sprache wird umgestellt …", "Switching the language …"))
+            run_root(["live-neustart"])
+            return
+        d = Adw.AlertDialog(heading=T("Neu anmelden", "Log in again"),
+                            body=T("Die neue Sprache gilt nach dem nächsten Anmelden. Danach geht es hier weiter.",
+                                   "The new language applies after you log in again. Setup continues afterwards."))
+        d.add_response("later", T("Später", "Later"))
+        d.add_response("logout", T("Jetzt abmelden", "Log out now"))
+        d.set_response_appearance("logout", Adw.ResponseAppearance.SUGGESTED)
+        d.set_default_response("logout")
+        d.connect("response", self.on_logout_answer)
+        d.present(self)
+
+    def on_logout_answer(self, _d, resp):
+        if resp == "logout":
+            subprocess.Popen(["gnome-session-quit", "--logout", "--no-prompt"])
+        else:
+            self.go(2)
+
+    def wait_page(self, text):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, valign=Gtk.Align.CENTER)
+        sp = Adw.Spinner()
+        sp.set_size_request(48, 48)
+        box.append(sp)
+        lb = Gtk.Label(label=text)
+        lb.add_css_class("title-2")
+        box.append(lb)
+        self.toasts.set_child(box)
+
+    # ---------- Schritt 2: Schrift ----------
+    def page_font(self):
+        page = Adw.PreferencesPage()
+        self.header(page, T("Schriftart", "Font"),
+                    T("Für Fenster, Menüs und Dokumente. Jede Änderung wirkt sofort.",
+                      "For windows, menus and documents. Every change applies right away."),
+                    icon="edios-einrichtung", size=72)
+        fg = Adw.PreferencesGroup(description=T("Das Terminal behält immer seine Monospace-Schrift.",
+                                                "The terminal always keeps its monospace font."))
+        installed = {f.get_name() for f in self.get_pango_context().list_families()}
+        cur = self.iface.get_string("font-name")
+        first = None
+        self.font_checks = {}
+        for key, nde, nen, fam, size, dde, den in FONTS:
+            name, desc = T(nde, nen), T(dde, den)
+            row = Adw.ActionRow(subtitle=GLib.markup_escape_text(desc))
+            row.set_title(f'<span font_family="{fam}">{GLib.markup_escape_text(name)}</span>')
+            chk = Gtk.CheckButton(valign=Gtk.Align.CENTER)
+            if first:
+                chk.set_group(first)
+            else:
+                first = chk
+            row.add_prefix(chk)
+            row.set_activatable_widget(chk)
+            if fam not in installed:
+                row.set_sensitive(False)
+                row.set_subtitle(T("Diese Schrift ist nicht installiert.", "This font is not installed."))
+            if cur.startswith(fam + " ") or cur == fam:
+                chk.set_active(True)
+            chk.connect("toggled", self.on_font, key)
+            self.font_checks[key] = chk
+            fg.add(row)
+        self.preview = Gtk.Label(wrap=True, xalign=0)
+        frame = Gtk.Frame(margin_top=12)
+        frame.add_css_class("view")
+        frame.add_css_class("edios-preview")
+        frame.set_child(self.preview)
+        cap = Gtk.Label(label=T("Vorschau", "Preview"), xalign=0, margin_top=12)
+        cap.add_css_class("heading")
+        fg.add(cap)
+        fg.add(frame)
+        page.add(fg)
+        self.update_preview()
+        self.next_button(page, T("Weiter", "Continue"), lambda *_: self.go(3))
+        return page
+
+    def current_family(self):
+        for key, *_r in FONTS:
+            if self.font_checks[key].get_active():
+                return _r[2]
+        return None
+
+    def update_preview(self):
+        fam = self.current_family() or "Sans"
+        self.preview.set_markup(f'<span font_family="{fam}" size="large">'
+                                f'{GLib.markup_escape_text(PREVIEW[L])}</span>')
+
+    def on_font(self, chk, key):
+        if not chk.get_active():
+            return
+        for k, _a, _b, fam, size, _c, _d in FONTS:
+            if k == key:
+                self.iface.set_string("font-name", f"{fam} {size}")
+                self.iface.set_string("document-font-name", f"{fam} {size}")
+                self.wm.set_string("titlebar-font", f"{fam} Bold {size}")
+        Gio.Settings.sync()
+        self.update_preview()
+
+    # ---------- Schritt 3: Dock ----------
+    def page_dock(self):
+        page = Adw.PreferencesPage()
+        self.header(page, T("Dock-Position", "Dock position"),
+                    T("Wo die Leiste mit deinen Lieblings-Apps sitzen soll.",
+                      "Where the bar with your favourite apps should be."),
+                    icon="edios-einrichtung", size=72)
+        dg = Adw.PreferencesGroup()
+        hbox = Gtk.Box(spacing=12, homogeneous=True, margin_top=6)
+        curdock = self.dock.get_string("dock-position") if self.dock else "LEFT"
+        firstb = None
+        for val, lde, len_ in DOCK:
+            b = Gtk.ToggleButton()
+            b.add_css_class("dock-choice")
+            if firstb:
+                b.set_group(firstb)
+            else:
+                firstb = b
+            inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            inner.append(self.mini_screen(val))
+            inner.append(Gtk.Label(label=T(lde, len_)))
+            b.set_child(inner)
+            b.set_active(val == curdock)
+            b.connect("toggled", self.on_dock, val)
+            hbox.append(b)
+        dg.add(hbox)
+        if not self.dock:
+            hbox.set_sensitive(False)
+            dg.set_description(T("Das Dock (Dash to Dock) ist nicht installiert.",
+                                 "The dock (Dash to Dock) is not installed."))
+        page.add(dg)
+        hint = T("Alles lässt sich später wieder ändern: „ediOS-Einrichtung“ in der App-Übersicht.",
+                 "You can change everything later: “ediOS Setup” in the app overview.")
+        if LIVE:
+            hint += "\n" + T("Der Installer übernimmt deine Auswahl ins installierte ediOS.",
+                             "The installer copies your choices to the installed ediOS.")
+        hg = Adw.PreferencesGroup(description=hint)
+        page.add(hg)
+        self.next_button(page, T("Fertig", "Done"), self.on_done)
+        return page
+
+    def mini_screen(self, pos):
+        screen = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL if pos != "BOTTOM" else Gtk.Orientation.VERTICAL)
+        screen.add_css_class("mini-screen")
+        screen.set_halign(Gtk.Align.CENTER)
+        screen.set_valign(Gtk.Align.CENTER)
+        screen.set_size_request(112, 70)
+        screen.set_vexpand(False)       # nicht auf die ganze Hoehe ziehen
+        screen.set_hexpand(False)
+        dock = Gtk.Box()
+        dock.add_css_class("mini-dock")
+        dock.add_css_class("mini-dock-h" if pos == "BOTTOM" else "mini-dock-v")
+        spacer = Gtk.Box(hexpand=True, vexpand=True)
+        if pos == "LEFT":
+            screen.append(dock)
+            screen.append(spacer)
+        else:
+            screen.append(spacer)
+            screen.append(dock)
+        return screen
+
+    def on_dock(self, btn, val):
+        if btn.get_active() and self.dock:
+            self.dock.set_string("dock-position", val)
+            Gio.Settings.sync()
+
+    def on_done(self, *_):
+        write_stamp(STAMP_DONE, "ediOS-Einrichtung abgeschlossen")
+        remove(STAMP_STEP)
+        Gio.Settings.sync()
+        self.close()
+
+    def toast(self, text):
+        t = Adw.Toast(title=text)
+        t.set_timeout(6)
+        self.toasts.add_toast(t)
+
+
+class App(Adw.Application):
+    def __init__(self, welcome, step):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.welcome, self.step = welcome, step
+
+    def do_activate(self):
+        win = self.get_active_window()
+        if not win:
+            prov = Gtk.CssProvider()
+            prov.load_from_string(CSS)
+            Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov,
+                                                      Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            win = Einrichtung(self, self.welcome, self.step)
+        win.present()
+
+
+def main():
+    welcome = "--willkommen" in sys.argv
+    step = read_stamp(STAMP_STEP)
+    step = int(step) if step and step.isdigit() else 1
+    if welcome:
+        if os.path.exists(STAMP_DONE):
+            return 0
+        if not LIVE:
+            # installiert: nur einmal von selbst (ausser es geht nach einem Sprachwechsel weiter)
+            if os.path.exists(STAMP_SHOWN) and step == 1:
+                return 0
+            write_stamp(STAMP_SHOWN, "ediOS-Einrichtung wurde beim ersten Anmelden angezeigt")
+    return App(welcome, step).run([sys.argv[0]])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

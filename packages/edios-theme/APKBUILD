@@ -1,0 +1,17 @@
+# ediOS Aussehen: Icons, Logo, Hintergrund, Desktop-Voreinstellungen (dconf).
+# Dateien und Ziele stehen in src/files.map (Gruppe "theme").
+pkgname=edios-theme
+pkgver=1.0.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
+pkgrel=0
+pkgdesc="ediOS look (icons, logo, wallpaper, desktop defaults)"
+url="https://github.com/edululilar-sketch/ediOS"
+arch="noarch"
+license="GPL-3.0-or-later"
+depends="adwaita-icon-theme adwaita-fonts-sans adwaita-fonts-mono dconf"
+install="$pkgname.post-install $pkgname.post-upgrade"
+options="!check"
+source=""
+
+package() {
+	sh "$startdir/edios-src/install-map.sh" "$pkgdir" theme
+}

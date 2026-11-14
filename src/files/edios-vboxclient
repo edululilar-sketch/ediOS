@@ -1,0 +1,6 @@
+#!/bin/sh
+# Startet die VirtualBox-Sitzungsdienste (VBoxClient) nur in einer VirtualBox-VM.
+# Auf echter Hardware und in anderen VMs passiert nichts (spart Prozesse und Xwayland-Starts).
+grep -qs -e VirtualBox -e innotek /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor || exit 0
+[ -x /usr/sbin/VBoxClient-all ] && exec /usr/sbin/VBoxClient-all
+exit 0

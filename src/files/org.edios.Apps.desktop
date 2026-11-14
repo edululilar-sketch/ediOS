@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=ediOS Apps
+GenericName=Install apps
+GenericName[de]=Apps installieren
+Comment=Install and remove popular apps from Flathub: games, chat, media, creative, tools
+Comment[de]=Beliebte Apps von Flathub installieren und entfernen: Spiele, Chat, Medien, Kreativ, Werkzeuge
+Exec=/usr/bin/edios-apps
+Icon=edios-apps
+Terminal=false
+Categories=System;PackageManager;
+Keywords=Flathub;Flatpak;Steam;Discord;Games;Apps;Programs;install;
+Keywords[de]=Flathub;Flatpak;Steam;Discord;Spiele;Apps;Programme;installieren;
+StartupNotify=true

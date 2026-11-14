@@ -1,0 +1,50 @@
+#!/bin/sh
+# ediOS: einmal pro Woche nachsehen, ob es Updates gibt, und dann nur einen Hinweis zeigen. GPL-3.0-or-later
+# Es wird nichts automatisch installiert. Laeuft beim Anmelden (XDG-Autostart), nicht im Live-System.
+[ -e /etc/conf.d/liveuser ] && exit 0
+. /usr/share/edios/i18n.sh
+DIR="${XDG_CACHE_HOME:-$HOME/.cache}/edios"
+STAMP="$DIR/update-check"
+mkdir -p "$DIR/apk" || exit 0
+
+# Letzte erfolgreiche Pruefung juenger als 7 Tage? Dann nichts tun.
+[ -e "$STAMP" ] && [ -z "$(find "$STAMP" -mmin +10080 2>/dev/null)" ] && exit 0
+
+sleep "${EDIOS_CHECK_DELAY:-300}"   # erst einmal ankommen lassen (Netzwerk, Anmeldung)
+
+# Systempakete: nur die Netz-Paketquellen, Paketlisten in den eigenen Cache (ohne root).
+# --repositories-file blendet repositories.d aus, darum die ediOS-Quelle ausdruecklich mitnehmen.
+grep '^https\?://' /etc/apk/repositories > "$DIR/repositories.alpine" 2>/dev/null
+[ -s "$DIR/repositories.alpine" ] || exit 0
+{ cat "$DIR/repositories.alpine"
+  grep -v '^[[:space:]]*#' /etc/apk/repositories.d/edios.list 2>/dev/null | grep '^https\?://'
+} > "$DIR/repositories"
+check() {
+	apk --repositories-file "$1" --cache-dir "$DIR/apk" --update-cache \
+		list --upgradable > "$DIR/upgradable" 2> "$DIR/check.err" || return 1
+	! grep -qi 'warning\|error' "$DIR/check.err"
+}
+if ! check "$DIR/repositories"; then
+	# nur die ediOS-Quelle nicht erreichbar? Dann wenigstens die Alpine-Updates zaehlen
+	cmp -s "$DIR/repositories" "$DIR/repositories.alpine" && exit 0
+	check "$DIR/repositories.alpine" || exit 0   # kein Netz o. ae.: beim naechsten Anmelden erneut
+fi
+n="$(grep -c . "$DIR/upgradable")"
+
+# Flatpak (System und Benutzer)
+if command -v flatpak >/dev/null 2>&1; then
+	f="$(flatpak remote-ls --updates --columns=application 2>/dev/null | grep -c .)"
+	n=$(( n + ${f:-0} ))
+fi
+touch "$STAMP"
+[ "$n" -gt 0 ] || exit 0
+
+if [ "$n" = 1 ]; then txt="$(t "Es gibt 1 Update für ediOS." "There is 1 update for ediOS.")"
+else txt="$(t "Es gibt $n Updates für ediOS." "There are $n updates for ediOS.")"; fi
+# Nur diese eine Benachrichtigung. Ein Klick darauf oeffnet "ediOS aktualisieren"
+# (dort wird noch einmal gefragt, bevor etwas installiert wird).
+act="$(notify-send -a "$(t "ediOS aktualisieren" "Update ediOS")" -i edios-update -h string:desktop-entry:edios-update \
+	-A "default=$(t "Öffnen" "Open")" --wait \
+	"$(t "Updates verfügbar" "Updates available")" "$txt $(t "Klicke hier, um sie anzusehen und zu installieren." "Click here to review and install them.")" 2>/dev/null)"
+case "$act" in default) exec /usr/bin/edios-update ;; esac
+exit 0

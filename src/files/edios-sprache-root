@@ -1,0 +1,124 @@
+#!/bin/sh
+# ediOS: Sprache, Tastatur und Zeitzone systemweit setzen (root). GPL-3.0-or-later
+#
+#   edios-sprache-root set SPRACHE TASTATUR ZEITZONE [BENUTZER...]   SPRACHE: de|en, TASTATUR: xkb (de, us, ch ...)
+#   edios-sprache-root --root ZIEL set ...      dasselbe fuer ein anderes System (Installer, ohne laufende Dienste)
+#   edios-sprache-root zeigen                   aktuelle Werte ausgeben (SPRACHE TASTATUR ZEITZONE)
+#   edios-sprache-root live-neustart            nur Live-System: Anmeldung neu starten, damit GNOME die Sprache uebernimmt
+#
+# Gestartet von der ediOS-Einrichtung (pkexec bzw. im Live-System doas), vom Live-Start (edios.lang=) und vom Installer.
+# Schreibt: /etc/edios/sprache.conf, /etc/locale.conf, /etc/conf.d/gdm, /etc/localtime, /etc/timezone,
+# Tastatur fuer Desktop und Anmeldebildschirm (dconf), Firefox-Sprache, AccountsService-Sprache der Benutzer.
+set -eu
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+R=""
+if [ "${1:-}" = "--root" ]; then R="${2%/}"; shift 2; [ -d "$R/etc" ] || { echo "Kein System unter $R" >&2; exit 2; }; fi
+CONF="$R/etc/edios/sprache.conf"
+
+zeigen() {
+	SPRACHE=de; TASTATUR=de; ZEITZONE=Europe/Berlin
+	# shellcheck disable=SC1090
+	[ -r "$CONF" ] && . "$CONF"
+	echo "$SPRACHE $TASTATUR $ZEITZONE"
+}
+
+# "zeigen" darf jeder (die Einrichtung liest damit die aktuellen Werte), alles andere nur root
+[ "${1:-}" = zeigen ] || [ "$(id -u)" = 0 ] || { echo "Muss als root laufen / must run as root" >&2; exit 1; }
+
+case "${1:-}" in
+zeigen) zeigen; exit 0 ;;
+live-neustart)
+	[ -e /etc/conf.d/liveuser ] || { echo "Nur im Live-System" >&2; exit 3; }
+	# vom Aufrufer loesen: die Sitzung, aus der das kommt, wird gleich beendet
+	setsid -f sh -c 'sleep 1; rc-service gdm restart' >/dev/null 2>&1 </dev/null
+	exit 0 ;;
+set) shift ;;
+*) echo "usage: $0 [--root ZIEL] set de|en TASTATUR ZEITZONE [BENUTZER...] | zeigen | live-neustart" >&2; exit 64 ;;
+esac
+
+SPRACHE="${1:?Sprache}"; TASTATUR="${2:?Tastatur}"; ZEITZONE="${3:?Zeitzone}"; shift 3
+case "$SPRACHE" in
+de) LOC=de_DE.UTF-8; FF=de ;;
+en) LOC=en_US.UTF-8; FF=en-US ;;
+*) echo "Unbekannte Sprache: $SPRACHE" >&2; exit 4 ;;
+esac
+# xkb-Name, z. B. de, us, ch, gb, us+intl, de+nodeadkeys
+printf '%s' "$TASTATUR" | grep -Eq '^[a-z]{2,3}(\+[a-z0-9_-]{1,32})?$' || { echo "Ungueltige Tastatur: $TASTATUR" >&2; exit 5; }
+printf '%s' "$ZEITZONE" | grep -Eq '^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$' || { echo "Ungueltige Zeitzone: $ZEITZONE" >&2; exit 6; }
+[ -f "$R/usr/share/zoneinfo/$ZEITZONE" ] || { echo "Zeitzone nicht gefunden: $ZEITZONE" >&2; exit 6; }
+
+mkdir -p "$R/etc/edios" "$R/etc/conf.d"
+printf 'SPRACHE=%s\nTASTATUR=%s\nZEITZONE=%s\n' "$SPRACHE" "$TASTATUR" "$ZEITZONE" > "$CONF"
+
+# --- Sprache ---
+printf 'LANG=%s\n' "$LOC" > "$R/etc/locale.conf"
+cat > "$R/etc/conf.d/gdm" <<EOF
+# ediOS: Sprache fuer GDM (Anmeldebildschirm) und Standardsprache neuer Sitzungen.
+# Wird von /etc/init.d/gdm eingelesen und von edios-sprache-root geschrieben.
+export LANG="$LOC"
+EOF
+# LANG/LANGUAGE nicht ueber /etc/environment (pam_env wuerde die Sprache des Benutzers ueberschreiben)
+if [ -f "$R/etc/environment" ]; then
+	grep -Ev '^(LANG|LANGUAGE)=' "$R/etc/environment" > "$R/etc/environment.edios-tmp" || true
+	mv -f "$R/etc/environment.edios-tmp" "$R/etc/environment"
+fi
+
+# --- Zeitzone ---
+ln -sfn "/usr/share/zoneinfo/$ZEITZONE" "$R/etc/localtime"
+echo "$ZEITZONE" > "$R/etc/timezone"
+
+# --- Tastatur (Desktop-Voreinstellung und Anmeldebildschirm) ---
+layout="${TASTATUR}"
+mkdir -p "$R/etc/edios/dconf-src" "$R/etc/edios/dconf-gdm" "$R/etc/dconf/db"
+cat > "$R/etc/edios/dconf-src/01-generated.ini" <<EOF
+[org/gnome/desktop/input-sources]
+sources=[('xkb', '$layout')]
+
+[org/gnome/system/locale]
+region='$LOC'
+EOF
+cat > "$R/etc/edios/dconf-gdm/01-generated.ini" <<EOF
+[org/gnome/desktop/input-sources]
+sources=[('xkb', '$layout')]
+EOF
+dc() { if [ -n "$R" ]; then chroot "$R" dconf compile "$1" "$2"; else dconf compile "$1" "$2"; fi; }
+[ ! -f "$R/etc/edios/dconf-src/00-edios.ini" ] || dc /etc/dconf/db/local /etc/edios/dconf-src
+dc /etc/dconf/db/gdm /etc/edios/dconf-gdm
+
+# --- fastfetch (Terminal-Systeminfo) ---
+[ ! -f "$R/etc/fastfetch/config-$SPRACHE.jsonc" ] || cp "$R/etc/fastfetch/config-$SPRACHE.jsonc" "$R/etc/fastfetch/config.jsonc"
+
+# --- Firefox ---
+for f in "$R/etc/firefox/policies/policies.json" "$R/usr/lib/firefox/distribution/policies.json"; do
+	[ -f "$f" ] || continue
+	sed -i "s/\"RequestedLocales\": *\[[^]]*\]/\"RequestedLocales\": [\"$FF\"]/" "$f"
+done
+
+# --- Sprache der Benutzer (AccountsService; GDM startet die Sitzung damit) ---
+for u in "$@"; do
+	printf '%s' "$u" | grep -Eq '^[a-z_][a-z0-9_-]*$' || continue
+	uid="$(awk -F: -v u="$u" '$1 == u {print $3}' "$R/etc/passwd")"
+	[ -n "$uid" ] || continue
+	done_dbus=no
+	if [ -z "$R" ] && command -v gdbus >/dev/null 2>&1; then
+		if gdbus call --system -d org.freedesktop.Accounts -o "/org/freedesktop/Accounts/User$uid" \
+			-m org.freedesktop.Accounts.User.SetLanguage "$LOC" >/dev/null 2>&1; then done_dbus=yes; fi
+	fi
+	if [ "$done_dbus" = no ]; then
+		d="$R/var/lib/AccountsService/users"; mkdir -p "$d"
+		f="$d/$u"
+		if [ -f "$f" ] && grep -q '^Language=' "$f"; then
+			sed -i "s/^Language=.*/Language=$LOC/" "$f"
+		elif [ -f "$f" ]; then
+			sed -i "/^\[User\]/a Language=$LOC" "$f"
+		else
+			printf '[User]\nLanguage=%s\nSystemAccount=false\n' "$LOC" > "$f"
+		fi
+		chmod 600 "$f"
+	fi
+done
+# Bootmenue-Texte des installierten Systems (nur wenn ediOS von Platte laeuft)
+if [ -z "$R" ] && [ -f /boot/efi/EFI/edios/grubx64.efi ] && [ -x /usr/libexec/edios-grub-stub ]; then
+	/usr/libexec/edios-grub-stub / || true
+fi
+echo "ediOS: Sprache $SPRACHE ($LOC), Tastatur $TASTATUR, Zeitzone $ZEITZONE"

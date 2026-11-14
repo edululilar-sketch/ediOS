@@ -1,0 +1,102 @@
+#!/bin/sh
+# ediOS: Login- und Sperrbildschirm-Theme in gnome-shell einbauen.
+#
+# Baut /usr/share/gnome-shell/gnome-shell-theme.gresource aus der GERADE INSTALLIERTEN
+# gnome-shell-Fassung plus ediOS-CSS und weichgezeichnetem Hintergrund neu. Darum ueberlebt
+# das Theme gnome-shell-Updates: der apk-Trigger (Paket edios-gdm-theme) und der Dienst
+# edios-gdm-theme (beim Booten, vor GDM) rufen dieses Skript auf.
+#
+#   edios-gdm-theme-apply            Theme einbauen (macht nichts, wenn schon eingebaut)
+#   edios-gdm-theme-apply restore    Original-Look von GNOME wiederherstellen und ausschalten
+#   edios-gdm-theme-apply enable     wieder einschalten (und einbauen)
+#
+# Jeder Fehler laesst die Originaldatei unangetastet. Rueckgabe ist immer 0, damit apk und
+# der Systemstart nie daran scheitern.
+R="${EDIOS_ROOT:-}"                       # nur fuer den Probelauf beim Bau
+D="$R/usr/share/edios/gdm"
+T="$R/usr/libexec/edios"
+DST="$R/usr/share/gnome-shell/gnome-shell-theme.gresource"
+PREFIX=/org/gnome/shell/theme
+MARK='ediOS-Login'
+
+log() { echo "edios-gdm-theme: $*" >&2; }
+
+case "${1:-}" in
+restore)
+	: > "$D/disabled" 2>/dev/null
+	if [ -f "$D/upstream.gresource" ] && [ -f "$DST" ]; then
+		cp "$D/upstream.gresource" "$DST.edios-tmp" && mv -f "$DST.edios-tmp" "$DST" \
+			&& log "Original-Look wiederhergestellt"
+	fi
+	rm -f "$D/applied.sha256"
+	exit 0 ;;
+enable)
+	rm -f "$D/disabled" ;;
+esac
+
+[ -f "$D/disabled" ] && exit 0
+[ -f "$DST" ] || exit 0
+for f in "$T/gresource" "$T/glib-compile-resources"; do
+	[ -x "$f" ] || { log "Werkzeug fehlt: $f"; exit 0; }
+done
+for f in edios-login.css edios-login-bg.jpg; do
+	[ -f "$D/$f" ] || { log "Datei fehlt: $D/$f"; exit 0; }
+done
+
+cur="$(sha256sum "$DST" | cut -d' ' -f1)"
+[ -f "$D/applied.sha256" ] && [ "$cur" = "$(cat "$D/applied.sha256")" ] && exit 0   # schon eingebaut
+
+W="$(mktemp -d)" || exit 0
+trap 'rm -rf "$W"' EXIT INT TERM
+
+has_mark() {   # $1 = gresource-Datei; enthaelt sie schon ediOS-CSS?
+	"$T/gresource" extract "$1" "$PREFIX/gnome-shell-dark.css" 2>/dev/null | grep -q 'ediOS'
+}
+
+build() {
+	base="$DST"
+	if has_mark "$DST"; then
+		# Datei ist schon angepasst (aeltere ediOS-Fassung): nur mit sauberer Original-Kopie weiter
+		if [ -f "$D/upstream.gresource" ] && ! has_mark "$D/upstream.gresource"; then
+			base="$D/upstream.gresource"
+		else
+			log "keine saubere Original-Datei gefunden, nichts geaendert"; return 1
+		fi
+	fi
+	cp "$base" "$W/up.gresource" || return 1
+	mkdir -p "$W/src" || return 1
+	xml="$W/theme.gresource.xml"
+	printf '<?xml version="1.0" encoding="UTF-8"?>\n<gresources>\n  <gresource prefix="%s">\n' "$PREFIX" > "$xml"
+	n=0
+	for r in $("$T/gresource" list "$W/up.gresource"); do
+		case "$r" in "$PREFIX"/*) ;; *) log "unerwarteter Pfad: $r"; return 1 ;; esac
+		f="${r#"$PREFIX"/}"
+		case "$f" in edios-login-bg.jpg) continue ;; esac
+		mkdir -p "$W/src/$(dirname "$f")" || return 1
+		"$T/gresource" extract "$W/up.gresource" "$r" > "$W/src/$f" || return 1
+		printf '    <file>%s</file>\n' "$f" >> "$xml"
+		n=$((n + 1))
+	done
+	[ "$n" -ge 1 ] || return 1
+	css=0
+	for c in gnome-shell-dark.css gnome-shell-light.css; do
+		[ -f "$W/src/$c" ] || continue
+		cat "$D/edios-login.css" >> "$W/src/$c" || return 1
+		css=$((css + 1))
+	done
+	[ "$css" -ge 1 ] || { log "kein gnome-shell-CSS in der Datei gefunden"; return 1; }
+	cp "$D/edios-login-bg.jpg" "$W/src/edios-login-bg.jpg" || return 1
+	printf '    <file>edios-login-bg.jpg</file>\n  </gresource>\n</gresources>\n' >> "$xml"
+
+	"$T/glib-compile-resources" --sourcedir="$W/src" --target="$W/new.gresource" "$xml" || return 1
+	[ "$("$T/gresource" list "$W/new.gresource" | wc -l)" -eq $((n + 1)) ] || return 1
+	"$T/gresource" extract "$W/new.gresource" "$PREFIX/gnome-shell-dark.css" | grep -q "$MARK" || return 1
+
+	cp "$W/up.gresource" "$D/upstream.gresource.tmp" && mv -f "$D/upstream.gresource.tmp" "$D/upstream.gresource" || return 1
+	cp "$W/new.gresource" "$DST.edios-tmp" && mv -f "$DST.edios-tmp" "$DST" || return 1
+	sha256sum "$DST" | cut -d' ' -f1 > "$D/applied.sha256"
+	log "Theme eingebaut ($n Dateien aus gnome-shell, $css CSS angepasst)"
+}
+
+build || { rm -f "$DST.edios-tmp"; log "nicht eingebaut, GNOME-Original bleibt"; }
+exit 0

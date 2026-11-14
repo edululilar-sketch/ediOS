@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+description="ediOS: Login- und Sperrbildschirm-Theme einbauen (auch nach gnome-shell-Updates)"
+
+depend() {
+	after localmount
+	before gdm
+}
+
+start() {
+	ebegin "Checking ediOS login theme"
+	[ ! -x /usr/libexec/edios/edios-gdm-theme-apply ] || /usr/libexec/edios/edios-gdm-theme-apply
+	eend 0
+}

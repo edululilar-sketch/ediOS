@@ -1,0 +1,104 @@
+# ediOS: wohin jede Datei aus src/ gehoert (GPL-3.0-or-later).  Gruppe  Rechte  Quelle(relativ zu src/)  Ziel
+# Gruppen: base / theme / apps  -> apk-Pakete edios-base / edios-theme / edios-apps
+#          system               -> immer im Overlay (Secure Boot, Audio, VirtualBox, Einstellungen)
+#          live                 -> nur im Live-System (Installer, Live-Benutzer); der Installer entfernt die /etc-Teile
+# Benutzt von src/install-map.sh (Overlay und APKBUILDs).
+
+# --- base: Update-Knopf, Einrichtung (Sprache), Terminal, Sitzungs-Erweiterung ---
+base	755	files/edios-update				/usr/bin/edios-update
+base	755	files/edios-update-root				/usr/libexec/edios-update-root
+base	755	files/edios-update-check			/usr/libexec/edios-update-check
+base	644	files/edios-update-check.desktop		/etc/xdg/autostart/edios-update-check.desktop
+base	644	files/edios-update.desktop			/usr/share/applications/edios-update.desktop
+base	644	files/org.edios.update.policy			/usr/share/polkit-1/actions/org.edios.update.policy
+base	755	files/edios-einrichtung				/usr/bin/edios-einrichtung
+base	755	files/edios-font				/usr/bin/edios-font
+base	644	files/edios-einrichtung-willkommen.desktop	/etc/xdg/autostart/edios-einrichtung-willkommen.desktop
+base	644	files/org.edios.Einrichtung.desktop		/usr/share/applications/org.edios.Einrichtung.desktop
+base	755	files/edios-terminal-server			/usr/libexec/edios-terminal-server
+base	644	files/org.gnome.Terminal.service		/usr/share/edios/dbus/org.gnome.Terminal.service
+base	644	files/xdg-terminals.list			/etc/xdg/xdg-terminals.list
+base	644	files/edios-i18n.sh				/usr/share/edios/i18n.sh
+base	755	files/edios-sprache-root			/usr/libexec/edios-sprache-root
+base	644	files/org.edios.sprache.policy			/usr/share/polkit-1/actions/org.edios.sprache.policy
+base	644	files/edios-session@edios/metadata.json		/usr/share/gnome-shell/extensions/edios-session@edios/metadata.json
+base	644	files/edios-session@edios/extension.js		/usr/share/gnome-shell/extensions/edios-session@edios/extension.js
+
+# --- theme: Icons, Logo, Hintergrund, Desktop-Voreinstellungen ---
+theme	644	icons/edios-apps.svg				/usr/share/icons/hicolor/scalable/apps/edios-apps.svg
+theme	644	icons/edios-update.svg				/usr/share/icons/hicolor/scalable/apps/edios-update.svg
+theme	644	icons/edios-einrichtung.svg			/usr/share/icons/hicolor/scalable/apps/edios-einrichtung.svg
+theme	644	icons/edios-install.svg				/usr/share/icons/hicolor/scalable/apps/edios-install.svg
+theme	644	icons/edios-secureboot.svg			/usr/share/icons/hicolor/scalable/apps/edios-secureboot.svg
+theme	644	icons/edios-update.svg				/usr/share/pixmaps/edios-update.svg
+theme	644	icons/edios-logo.png				/usr/share/pixmaps/edios-logo.png
+theme	644	icons/edios-logo.png				/usr/share/icons/hicolor/256x256/apps/edios-logo.png
+theme	644	icons/edios-wallpaper.png			/usr/share/backgrounds/edios/edios-wallpaper.png
+theme	644	files/00-edios.ini				/etc/edios/dconf-src/00-edios.ini
+
+# --- apps: Apps-Helfer ---
+apps	755	files/edios-apps				/usr/bin/edios-apps
+apps	644	files/org.edios.Apps.desktop			/usr/share/applications/org.edios.Apps.desktop
+
+# --- system: Secure Boot ---
+system	755	files/edios-secureboot				/usr/bin/edios-secureboot
+system	755	files/edios-secureboot-root			/usr/libexec/edios-secureboot-root
+system	755	files/edios-kernel-hook				/usr/libexec/edios-kernel-hook
+system	755	files/edios-kernel-hook				/etc/apk/commit_hooks.d/edios-secureboot.sh
+system	755	files/edios-grub-stub				/usr/libexec/edios-grub-stub
+system	644	files/edios-secureboot.desktop			/usr/share/applications/edios-secureboot.desktop
+system	644	files/org.edios.secureboot.policy		/usr/share/polkit-1/actions/org.edios.secureboot.policy
+system	644	files/edios-secureboot-hinweis.desktop		/etc/xdg/autostart/edios-secureboot-hinweis.desktop
+# --- system: Ton, VirtualBox ---
+system	755	files/edios-audio				/usr/libexec/edios-audio
+system	644	files/edios-audio.desktop			/etc/xdg/autostart/edios-audio.desktop
+system	644	files/edios-audio.desktop			/usr/share/gdm/greeter/autostart/edios-audio.desktop
+system	755	files/edios-vboxclient				/usr/libexec/edios-vboxclient
+system	644	files/vboxclient.desktop			/etc/xdg/autostart/vboxclient.desktop
+system	755	files/edios-vbox				/etc/init.d/edios-vbox
+system	644	files/autostart-aus/pipewire.desktop		/etc/xdg/autostart/pipewire.desktop
+system	644	files/autostart-aus/pulseaudio.desktop		/etc/xdg/autostart/pulseaudio.desktop
+system	644	files/autostart-aus/mpris-proxy.desktop		/etc/xdg/autostart/mpris-proxy.desktop
+system	644	files/autostart-aus/geoclue-demo-agent.desktop	/etc/xdg/autostart/geoclue-demo-agent.desktop
+system	644	files/autostart-aus/localsearch-3.desktop	/etc/xdg/autostart/localsearch-3.desktop
+system	644	files/autostart-aus/org.gnome.Evolution-alarm-notify.desktop	/etc/xdg/autostart/org.gnome.Evolution-alarm-notify.desktop
+# --- system: Einstellungen ---
+system	644	files/90-edios.conf				/etc/sysctl.d/90-edios.conf
+system	644	files/00edios-locale.sh				/etc/profile.d/00edios-locale.sh
+system	644	files/01edios-path.sh				/etc/profile.d/01edios-path.sh
+system	644	files/conf.d-gdm				/etc/conf.d/gdm
+system	644	files/conf.d-zram-init				/etc/conf.d/zram-init
+system	644	files/conf.d-hwclock				/etc/conf.d/hwclock
+system	644	files/NetworkManager.conf			/etc/NetworkManager/NetworkManager.conf
+system	644	files/environment				/etc/environment
+system	644	files/locale.conf				/etc/locale.conf
+system	644	files/firefox-policies.json			/etc/firefox/policies/policies.json
+system	644	files/firefox-policies.json			/usr/lib/firefox/distribution/policies.json
+system	644	files/fastfetch-config.jsonc			/etc/fastfetch/config.jsonc
+system	644	files/fastfetch-config.jsonc			/etc/fastfetch/config-de.jsonc
+system	644	files/fastfetch-config-en.jsonc			/etc/fastfetch/config-en.jsonc
+system	644	files/edios.txt					/etc/fastfetch/edios.txt
+system	644	files/edios-hyfetch.txt				/etc/fastfetch/edios-hyfetch.txt
+system	644	files/hyfetch.json				/etc/skel/.config/hyfetch.json
+system	644	files/firmware.list				/etc/edios/firmware
+system	644	files/protected_paths-edios.list		/etc/apk/protected_paths.d/edios.list
+system	644	files/00-edios-gdm.ini				/etc/edios/dconf-gdm/00-edios-gdm.ini
+system	644	files/doas-20-wheel.conf			/etc/doas.d/20-wheel.conf
+system	644	files/nftables-edios.nft			/etc/nftables.d/edios.nft
+
+# --- live: nur im Live-System ---
+live	755	live/edios-install				/usr/bin/edios-install
+live	755	live/edios-install-root				/usr/libexec/edios-install-root
+live	644	live/edios-install.desktop			/usr/share/applications/edios-install.desktop
+live	755	live/edios-live					/etc/init.d/edios-live
+live	644	live/liveuser.conf				/etc/conf.d/liveuser
+live	600	live/doas-edios-live.conf			/etc/doas.d/edios-live.conf
+live	644	live/gdm-custom.conf				/etc/gdm/custom.conf
+live	644	live/dconf-profile-user				/etc/dconf/profile/user
+live	644	live/00-edios-live.ini				/etc/edios/dconf-live/00-edios-live.ini
+live	644	live/update-grub.conf				/etc/update-grub.conf
+live	644	live/protected_paths-edios-live.list		/etc/apk/protected_paths.d/edios-live.list
+live	755	live/edios-toram				/etc/init.d/edios-toram
+live	755	live/edios-firmware				/etc/init.d/edios-firmware
+live	755	live/edios-toram-hinweis			/usr/libexec/edios-toram-hinweis
+live	644	live/edios-toram-hinweis.desktop		/etc/xdg/autostart/edios-toram-hinweis.desktop

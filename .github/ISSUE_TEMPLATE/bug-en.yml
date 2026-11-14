@@ -1,0 +1,60 @@
+name: Report a bug (English)
+description: Something in ediOS does not work as it should.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping to make ediOS better! Please do **not** include passwords or personal data.
+  - type: input
+    id: version
+    attributes:
+      label: ediOS version
+      description: Shown in Settings → System → About, or in a terminal with `cat /etc/os-release`.
+      placeholder: "ediOS 1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does the problem happen?
+      options:
+        - Live system (from the USB stick)
+        - Installed ediOS
+        - Creating the USB stick / starting from the stick
+        - During installation
+        - Updates ("Update ediOS")
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Briefly describe what you did and what happened then.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can the problem be reproduced?
+      placeholder: |
+        1. …
+        2. …
+        3. …
+  - type: textarea
+    id: pc
+    attributes:
+      label: Your PC
+      description: Make/model, graphics card, Wi-Fi chip, Secure Boot on or off. The output of `fastfetch` in a terminal helps.
+  - type: textarea
+    id: log
+    attributes:
+      label: Messages / logs (optional)
+      description: Error messages or screenshots. Logs e.g. from `/var/log/messages` or `~/.cache/gdm/session.log`.
+      render: text

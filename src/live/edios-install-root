@@ -1,0 +1,395 @@
+#!/bin/sh
+# ediOS Installer, root-Teil. GPL-3.0-or-later
+# Gestartet von /usr/bin/edios-install per doas (Live-System). Sprache der Meldungen: EDIOS_LANG (de|en).
+#
+#   edios-install-root --liste
+#       alle moeglichen Zielplatten, eine Zeile je Platte:
+#       PLATTE|MODELL|GROESSE|ANSCHLUSS(usb/extern/intern)|EINGEHAENGT(0/1)|INHALT
+#       INHALT = durch ";" getrennt: os:NAME | part:DATEISYSTEM:NAME:GROESSE | leer
+#       Das Startmedium (ediOS-Stick) und Platten unter 12 GB erscheinen nie.
+#   edios-install-root --pruefen PLATTE        eine Zeile wie oben, Fehler wenn nicht erlaubt
+#   edios-install-root --aushaengen PLATTE     alle Partitionen der Platte aushaengen (und Swap abschalten)
+#   edios-install-root --installieren PLATTE BENUTZER "VOLLER NAME" JA [UEBERNAHME]   (stdin: Passwort-Hash $6$...)
+#       LOESCHT PLATTE vollstaendig und installiert ediOS (UEFI, GPT: 1 EFI "EDIOS", 2 Swap, 3 ext4).
+#       UEBERNAHME = Ordner /tmp/edios-uebernahme.* mit dconf.ini und einrichtung-erledigt aus dem Live-System.
+#
+# Sicherheit:
+#   - nur ganze Platten, nie das Startmedium, nie eine eingehaengte Platte
+#   - Bootloader NUR auf die EFI-Partition der Zielplatte; Abbruch, wenn sie nicht zur Zielplatte gehoert
+#   - andere Platten werden nur zum Anzeigen ihres Inhalts NUR LESEND eingehaengt, nie veraendert
+#   - UEFI-Booteintrag (NVRAM) nur bei interner Platte; Windows bleibt dann an erster Stelle
+# Fortschritt fuer das Fenster: Zeilen "@@SCHRITT n". Rueckgabe 0 = fertig.
+set -eu
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+. /usr/share/edios/i18n.sh
+export LANG=C.UTF-8
+[ "$(id -u)" = 0 ] || { echo "Muss als root laufen / must run as root" >&2; exit 1; }
+[ -e /etc/conf.d/liveuser ] || { t "Der Installer läuft nur im ediOS-Live-System." "The installer only runs in the ediOS live system." >&2; echo >&2; exit 2; }
+
+MNT=/mnt/edios-ziel
+SB=/usr/share/edios/secureboot
+MIN_GB=12
+step() { echo "@@SCHRITT $1"; }
+die() { printf '%s\n' "$(t "FEHLER" "ERROR"): $*" >&2; exit "${RC:-20}"; }
+
+part() {   # Platte Nummer -> Partition (nvme0n1 -> nvme0n1p1, sda -> sda1)
+	case "$1" in *[0-9]) echo "${1}p$2" ;; *) echo "$1$2" ;; esac
+}
+
+# --- Startmedium: Platte(n), von der ediOS gerade laeuft ---
+bootdisks() {
+	for m in $(awk '$2 ~ /^\/media\// {print $1}' /proc/mounts); do
+		pk="$(lsblk -no PKNAME "$m" 2>/dev/null | head -n1)"
+		echo "/dev/${pk:-$(basename "$m")}"
+	done
+	# nach "komplett in den RAM laden" ist der Stick ausgehaengt: gemerkt von edios-toram
+	[ ! -s /run/edios-toram/bootdisk ] || cat /run/edios-toram/bootdisk
+	# jede Platte mit einem ediOS-ISO-Dateisystem (auch ein zweiter ediOS-Stick)
+	lsblk -lnpo NAME,FSTYPE,LABEL,PKNAME,TYPE 2>/dev/null | awk '$2 == "iso9660" && $3 ~ /^EDIOS/ {
+		if ($5 == "disk") print $1; else if ($4 != "") print "/dev/" $4 }'
+}
+is_bootdisk() { bootdisks | grep -qx "$1"; }
+
+anschluss() {   # usb | extern | intern
+	tran="$(lsblk -dno TRAN "$1" 2>/dev/null | tr -d ' ')"
+	rm_="$(lsblk -dno RM "$1" 2>/dev/null | tr -d ' ')"
+	hp="$(lsblk -dno HOTPLUG "$1" 2>/dev/null | tr -d ' ')"
+	if [ "$tran" = usb ]; then echo usb
+	elif [ "$rm_" = 1 ] || [ "$hp" = 1 ]; then echo extern
+	else echo intern; fi
+}
+
+eingehaengt() {   # 0/1: ist irgendetwas auf der Platte eingehaengt oder als Swap aktiv?
+	for p in $(lsblk -lnpo NAME "$1"); do
+		if grep -q "^$p " /proc/mounts || grep -q "^$p " /proc/swaps; then echo 1; return; fi
+	done
+	echo 0
+}
+
+# --- Inhalt einer Platte ermitteln (nur lesend) ---
+inhalt() {
+	d="$1"; items=""; tmp="$(mktemp -d)"
+	add() { case ";$items;" in *";$1;"*) ;; *) items="${items:+$items;}$1" ;; esac; }
+	for p in $(lsblk -lnpo NAME,TYPE "$d" | awk '$2 == "part" {print $1}'); do
+		fs="$(lsblk -no FSTYPE "$p" 2>/dev/null | head -n1)"
+		label="$(lsblk -no LABEL "$p" 2>/dev/null | head -n1 | tr -d '|;:')"
+		size="$(lsblk -no SIZE "$p" 2>/dev/null | head -n1 | tr -d ' ')"
+		pt="$(lsblk -no PARTTYPE "$p" 2>/dev/null | head -n1 | tr 'A-Z' 'a-z')"
+		[ "$fs" != swap ] || continue
+		# reservierte Microsoft-Partition (MSR) gehoert zu Windows und hat kein Dateisystem
+		[ "$pt" != e3c9e316-0b5c-4db8-817d-f92df00215ae ] || continue
+		[ -n "$fs" ] || { add "part:?:$label:$size"; continue; }
+		dir="$(awk -v p="$p" '$1 == p {print $2; exit}' /proc/mounts | sed 's/\\040/ /g')"
+		mounted_here=no
+		if [ -z "$dir" ]; then
+			opt=ro,nosuid,nodev,noexec
+			case "$fs" in
+				ntfs) timeout 15 mount -t ntfs3 -o "$opt" "$p" "$tmp" 2>/dev/null && mounted_here=yes ;;
+				vfat|exfat|ext2|ext3|ext4|btrfs|xfs|f2fs)
+					timeout 15 mount -t "$fs" -o "$opt" "$p" "$tmp" 2>/dev/null && mounted_here=yes ;;
+			esac
+			[ "$mounted_here" = no ] || dir="$tmp"
+		fi
+		found=no
+		if [ -n "$dir" ]; then
+			if [ -d "$dir/EFI" ] || [ "$pt" = c12a7328-f81f-11d2-ba4b-00a0c93ec93b ]; then
+				for e in "$dir"/EFI/* "$dir"/efi/*; do
+					[ -d "$e" ] || continue
+					case "$(basename "$e" | tr 'A-Z' 'a-z')" in
+						microsoft) add "os:Windows"; found=yes ;;
+						edios) add "os:ediOS"; found=yes ;;
+						ubuntu) add "os:Ubuntu"; found=yes ;;
+						debian) add "os:Debian"; found=yes ;;
+						fedora) add "os:Fedora"; found=yes ;;
+						opensuse*) add "os:openSUSE"; found=yes ;;
+						alpine) add "os:Alpine Linux"; found=yes ;;
+						arch|grub|systemd) add "os:Linux"; found=yes ;;
+					esac
+				done
+				[ "$found" = yes ] || [ "$fs" != vfat ] || found=efi
+			fi
+			if [ "$found" = no ]; then
+				osr=""
+				for r in "$dir/etc/os-release" "$dir/usr/lib/os-release" "$dir/@/etc/os-release" "$dir/@/usr/lib/os-release"; do
+					[ -f "$r" ] && { osr="$r"; break; }
+				done
+				if [ -n "$osr" ]; then
+					n="$(sed -n 's/^PRETTY_NAME=//p' "$osr" | tr -d '"|;:' | cut -c1-40)"
+					add "os:${n:-Linux}"; found=yes
+				elif [ -d "$dir/Windows/System32" ]; then
+					add "os:Windows"; found=yes
+				fi
+			fi
+		fi
+		[ "$mounted_here" = no ] || umount "$tmp" 2>/dev/null || umount -l "$tmp" 2>/dev/null || true
+		case "$found" in
+			no) add "part:$fs:$label:$size" ;;
+			efi) add "part:efi::$size" ;;
+		esac
+	done
+	rmdir "$tmp" 2>/dev/null || true
+	echo "${items:-leer}"
+}
+
+zeile() {   # eine Zeile fuer --liste/--pruefen
+	m="$(lsblk -dno MODEL "$1" 2>/dev/null | sed 's/[[:space:]]*$//; s/|//g')"
+	printf '%s|%s|%s|%s|%s|%s\n' "$1" "${m:-?}" "$(lsblk -dno SIZE "$1" | tr -d ' ')" "$(anschluss "$1")" \
+		"$(eingehaengt "$1")" "$(inhalt "$1")"
+}
+
+ziel_ok() {   # Platte grundsaetzlich erlaubt? (eingehaengt ist hier noch erlaubt)
+	d="$1"
+	case "$d" in /dev/*) ;; *) die "$(t "Kein Gerätepfad: $d" "Not a device path: $d")" ;; esac
+	[ -b "$d" ] || die "$(t "$d ist kein Laufwerk." "$d is not a drive.")"
+	[ "$(lsblk -dno TYPE "$d" 2>/dev/null)" = disk ] || die "$(t "$d ist keine ganze Platte." "$d is not a whole disk.")"
+	case "${d##*/}" in loop*|zram*|sr*|ram*) die "$(t "$d kann nicht als Ziel benutzt werden." "$d cannot be used as a target.")" ;; esac
+	is_bootdisk "$d" && die "$(t "$d ist der ediOS-Stick, von dem gerade gestartet wurde. Bitte eine andere Platte wählen." \
+		"$d is the ediOS stick that is running right now. Please choose another disk.")"
+	bytes="$(lsblk -dbno SIZE "$d" | tr -d ' ')"
+	[ "${bytes:-0}" -ge $((MIN_GB * 1000 * 1000 * 1000)) ] || die "$(t "$d ist zu klein (mindestens $MIN_GB GB)." "$d is too small (at least $MIN_GB GB).")"
+	return 0
+}
+
+aushaengen() {
+	d="$1"; bad=""
+	for p in $(lsblk -lnpo NAME "$d" | sort -r); do
+		grep -q "^$p " /proc/swaps && { swapoff "$p" 2>/dev/null || bad="$bad $p"; }
+		for mp in $(awk -v p="$p" '$1 == p {print $2}' /proc/mounts | sort -r); do
+			mp="$(printf '%b' "$mp")"
+			umount "$mp" 2>/dev/null || { sleep 1; umount "$mp" 2>/dev/null; } || bad="$bad $p"
+		done
+	done
+	sync
+	[ -z "$bad" ] || { RC=30 die "$(t "Diese Partitionen werden gerade benutzt und konnten nicht ausgehängt werden:$bad. Schließe Dateien-Fenster und Programme, die darauf zugreifen, und versuche es noch einmal." \
+		"These partitions are in use and could not be unmounted:$bad. Close file manager windows and programs that use them and try again.")"; }
+	[ "$(eingehaengt "$d")" = 0 ] || RC=30 die "$(t "$d ist noch eingehängt." "$d is still mounted.")"
+}
+
+case "${1:-}" in
+--liste)
+	for d in $(lsblk -dpno NAME,TYPE | awk '$2 == "disk" {print $1}'); do
+		case "${d##*/}" in loop*|zram*|sr*|ram*) continue ;; esac
+		is_bootdisk "$d" && continue
+		bytes="$(lsblk -dbno SIZE "$d" | tr -d ' ')"
+		[ "${bytes:-0}" -ge $((MIN_GB * 1000 * 1000 * 1000)) ] || continue
+		zeile "$d"
+	done
+	exit 0 ;;
+--pruefen) ziel_ok "${2:?}"; zeile "$2"; exit 0 ;;
+--aushaengen) ziel_ok "${2:?}"; aushaengen "$2"; exit 0 ;;
+--installieren) ;;
+*) echo "usage: $0 --liste | --pruefen DISK | --aushaengen DISK | --installieren DISK USER NAME JA [DIR]" >&2; exit 64 ;;
+esac
+
+DISK="${2:?}"; USERNAME="${3:?}"; FULLNAME="${4:-}"; CONFIRM="${5:-}"; UEB="${6:-}"
+[ "$CONFIRM" = JA ] || die "$(t "Bestätigung fehlt." "Confirmation missing.")"
+case "$USERNAME" in [a-z_]*) ;; *) die "$(t "Ungültiger Benutzername." "Invalid user name.")" ;; esac
+case "$USERNAME" in *[!a-z0-9_-]*) die "$(t "Ungültiger Benutzername." "Invalid user name.")" ;; esac
+case "$USERNAME" in root|edios|daemon|nobody|gdm|admin) die "$(t "Dieser Benutzername ist reserviert." "This user name is reserved.")" ;; esac
+case "$FULLNAME" in *:*) die "$(t "Der Name darf keinen Doppelpunkt enthalten." "The name must not contain a colon.")" ;; esac
+case "$UEB" in ''|/tmp/edios-uebernahme.*) ;; *) die "$(t "Ungültiger Übernahme-Ordner." "Invalid transfer folder.")" ;; esac
+IFS= read -r PWHASH || true
+case "$PWHASH" in '$6$'*) ;; *) die "$(t "Ungültiger Passwort-Hash." "Invalid password hash.")" ;; esac
+[ -d /sys/firmware/efi ] || { RC=3 die "$(t "Dieser PC wurde nicht per UEFI gestartet. Der ediOS-Installer braucht UEFI." "This PC was not started via UEFI. The ediOS installer needs UEFI.")"; }
+ziel_ok "$DISK"
+[ "$(eingehaengt "$DISK")" = 0 ] || aushaengen "$DISK"
+ART="$(anschluss "$DISK")"
+KV="$(cat "$SB/kernel-version")"
+
+# Paketquelle fuer die Installation: nur das Startmedium (bzw. seine Kopie im RAM) - kein Internet noetig
+BOOTREPO=""
+for m in $(awk '$2 ~ /^\/media\// {print $2}' /proc/mounts) /run/edios-toram/medium; do
+	[ -f "$m/apks/.boot_repository" ] && { BOOTREPO="$m/apks"; break; }
+done
+[ -n "$BOOTREPO" ] && [ -d "$BOOTREPO" ] || die "$(t "Paketquelle des Startmediums nicht gefunden." "Package source of the boot medium not found.")"
+cp /etc/apk/repositories /tmp/edios-repositories.live
+# Waehrend der Installation darf GNOME (udisks/GVfs) die Zielplatte nicht anfassen (kein Einhaengen, kein Pruefen)
+RULE=/run/udev/rules.d/90-edios-install.rules
+mkdir -p /run/udev/rules.d
+printf 'KERNEL=="%s*", ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0"\n' "${DISK#/dev/}" > "$RULE"
+udevadm control --reload 2>/dev/null; udevadm trigger --subsystem-match=block 2>/dev/null; udevadm settle 2>/dev/null
+# Die ediOS-Internetquelle nicht ins neue System mitnehmen (lbu wuerde sie kopieren, setup-disk wuerde dann aus dem
+# Internet laden): nur die Pakete vom Stick. Ins Ziel kommt edios.list danach aus dem Paket edios-keyring.
+EL=/etc/apk/repositories.d/edios.list
+[ ! -f "$EL" ] || mv -f "$EL" /tmp/edios.list.live
+cleanup() {
+	set +e
+	[ ! -f /tmp/edios.list.live ] || mv -f /tmp/edios.list.live "$EL"
+	rm -f "$RULE"; udevadm control --reload 2>/dev/null; udevadm trigger --subsystem-match=block 2>/dev/null
+	for p in $(lsblk -lnpo NAME "$DISK" 2>/dev/null); do grep -q "^$p " /proc/swaps && swapoff "$p"; done
+	cp /tmp/edios-repositories.live /etc/apk/repositories 2>/dev/null
+	grep -q " $MNT/sys/firmware/efi/efivars " /proc/mounts && umount "$MNT/sys/firmware/efi/efivars"
+	for m in "$MNT/boot/efi" "$MNT/dev" "$MNT/proc" "$MNT/sys" "$MNT"; do
+		grep -q " $m " /proc/mounts && umount "$m"
+	done
+	# nach einem Fehler in setup-disk: dessen Einhaengungen der Zielplatte wieder loesen (nur diese Platte)
+	for p in $(lsblk -lnpo NAME "$DISK" 2>/dev/null | sort -r); do
+		awk -v p="$p" '$1 == p {print $2}' /proc/mounts | sort -r | while read -r m; do umount "$m"; done
+	done
+}
+trap cleanup EXIT INT TERM
+echo "$BOOTREPO" > /etc/apk/repositories
+
+step 1
+echo "Ziel/target: $DISK  $(lsblk -dno MODEL "$DISK")  $(lsblk -dno SIZE "$DISK")  $ART"
+wipefs -a "$DISK" >/dev/null 2>&1 || true
+
+step 2
+# setup-disk: GPT, 1 = EFI (512 MB), 2 = Swap (2 GB), 3 = ext4. Uebernimmt die ediOS-Dateien per lbu.
+sdrc=0
+ERASE_DISKS="$DISK" USE_EFI=1 BOOTLOADER=grub DISKLABEL=gpt BOOT_SIZE=512 \
+	setup-disk -m sys -s 2048 "$DISK" || sdrc=$?
+
+ESP="$(part "$DISK" 1)"; ROOTP="$(part "$DISK" 3)"
+# setup-disk aktiviert die neue Swap-Partition; sie gehoert dem installierten System, nicht dem Live-System
+for p in $(lsblk -lnpo NAME "$DISK"); do grep -q "^$p " /proc/swaps && swapoff "$p"; done
+if [ "$sdrc" != 0 ]; then
+	# Letzter Schritt von setup-disk ist das Aushaengen. Scheitert nur das (Platte kurz belegt) und ist das
+	# System vollstaendig da, geht es weiter; sonst Abbruch.
+	ok=no
+	if grep -q " /mnt " /proc/mounts && [ -f /mnt/etc/apk/world ] && [ -f /mnt/boot/vmlinuz-lts ] \
+		&& [ -f /mnt/boot/grub/grub.cfg ]; then
+		for i in 1 2 3 4 5 6 7 8 9 10; do
+			awk '$2 ~ "^/mnt(/|$)" {print $2}' /proc/mounts | sort -r | while read -r m; do umount "$m" 2>/dev/null; done
+			grep -q " /mnt" /proc/mounts || { ok=yes; break; }
+			sleep 1
+		done
+	fi
+	[ "$ok" = yes ] || die "$(t "setup-disk ist fehlgeschlagen (Rückgabe $sdrc)." "setup-disk failed (exit code $sdrc).")"
+	echo "Hinweis: setup-disk meldete $sdrc beim Aushaengen, System ist vollstaendig - weiter."
+fi
+[ -b "$ESP" ] && [ -b "$ROOTP" ] || die "$(t "Partitionen auf $DISK nicht gefunden." "Partitions on $DISK not found.")"
+# EFI-Partition muss zur Zielplatte gehoeren
+[ "/dev/$(lsblk -no PKNAME "$ESP" | head -n1)" = "$DISK" ] || die "$(t "EFI-Partition gehört nicht zu $DISK - Abbruch." "EFI partition does not belong to $DISK - aborting.")"
+[ "$(lsblk -no PARTTYPE "$ESP" | tr 'A-Z' 'a-z')" = c12a7328-f81f-11d2-ba4b-00a0c93ec93b ] \
+	|| die "$(t "$ESP ist keine EFI-Partition - Abbruch." "$ESP is not an EFI partition - aborting.")"
+fatlabel "$ESP" EDIOS >/dev/null 2>&1 || dosfslabel "$ESP" EDIOS >/dev/null 2>&1 || true
+
+step 3
+mkdir -p "$MNT"
+mount -t ext4 "$ROOTP" "$MNT"
+mkdir -p "$MNT/boot/efi"
+mount -t vfat "$ESP" "$MNT/boot/efi"
+mount -t proc proc "$MNT/proc"; mount -o bind /dev "$MNT/dev"; mount -o bind /sys "$MNT/sys"
+
+# Live-Teile entfernen (nur bekannte Pfade)
+for f in /etc/conf.d/liveuser /etc/doas.d/edios-live.conf /etc/init.d/edios-live \
+	/etc/runlevels/default/edios-live /etc/runlevels/boot/edios-live /etc/dconf/db/live \
+	/etc/init.d/edios-toram /etc/runlevels/boot/edios-toram /etc/runlevels/sysinit/modloop /etc/update-grub.conf \
+	/etc/init.d/edios-firmware /etc/runlevels/sysinit/edios-firmware \
+	/etc/edios/dconf-live/00-edios-live.ini /usr/bin/edios-install /usr/libexec/edios-install-root \
+	/usr/share/applications/edios-install.desktop /etc/xdg/autostart/edios-toram-hinweis.desktop \
+	/usr/libexec/edios-toram-hinweis; do
+	rm -f "$MNT$f"
+done
+rmdir "$MNT/etc/edios/dconf-live" 2>/dev/null || true
+rm -f "$MNT/etc/apk/protected_paths.d/edios-live.list"
+# apk-Hook (Secure Boot) erst jetzt: waehrend setup-disk gab es auf dem Ziel noch kein /bin/sh
+install -Dm755 "$MNT/usr/libexec/edios-kernel-hook" "$MNT/etc/apk/commit_hooks.d/edios-secureboot.sh"
+printf '[daemon]\n' > "$MNT/etc/gdm/custom.conf"
+printf 'user-db:user\nsystem-db:local\n' > "$MNT/etc/dconf/profile/user"
+
+# Paketquellen: Mirror (wie im Live-System), Startmedium nur als Kommentar
+{
+	echo "#$BOOTREPO"
+	grep -v '^/' /tmp/edios-repositories.live | grep -v '^[[:space:]]*$' || true
+} > "$MNT/etc/apk/repositories"
+
+# Firmware und der signierte Kernel (fest auf die signierte Version)
+# shellcheck disable=SC2046
+apk --root "$MNT" --repositories-file /etc/apk/repositories --no-network add \
+	"linux-lts=$KV" $(grep -v '^#' /etc/edios/firmware)
+grep -q '^sfdisk$' "$MNT/etc/apk/world" && apk --root "$MNT" del --no-network sfdisk >/dev/null 2>&1 || true
+# Die ediOS-Paketquelle gehoert dem Paket edios-keyring; sie muss auf dem Ziel unveraendert da sein
+[ -f "$MNT/etc/apk/repositories.d/edios.list" ] || echo "Hinweis: edios.list fehlt auf dem Ziel" >&2
+
+# Kernel-Start und Treiber fuer das installierte System
+cat > "$MNT/etc/default/grub" <<'EOF2'
+GRUB_TIMEOUT=1
+GRUB_DISABLE_SUBMENU=y
+GRUB_DISABLE_RECOVERY=true
+GRUB_CMDLINE_LINUX_DEFAULT="modules=sd-mod,usb-storage,ext4 quiet rootfstype=ext4"
+EOF2
+echo 'features="ata base ide scsi usb virtio ext4 nvme kms"' > "$MNT/etc/mkinitfs/mkinitfs.conf"
+
+step 4
+# Den Live-Benutzer (ohne Passwort!) gibt es auf dem Ziel nicht: lbu hat passwd/shadow/group mitgenommen
+LIVEUSER=edios
+[ -r /etc/conf.d/liveuser ] && . /etc/conf.d/liveuser
+if grep -q "^$LIVEUSER:" "$MNT/etc/passwd"; then
+	chroot "$MNT" deluser "$LIVEUSER" >/dev/null 2>&1 || die "$(t "Live-Benutzer konnte auf dem Ziel nicht entfernt werden." "Live user could not be removed on the target.")"
+fi
+rm -rf "${MNT:?}/home/$LIVEUSER"
+rm -f "$MNT/var/lib/AccountsService/users/$LIVEUSER"
+grep -q "^$LIVEUSER:" "$MNT/etc/passwd" "$MNT/etc/shadow" && die "$(t "Live-Benutzer steht noch auf dem Ziel." "Live user is still on the target.")"
+chroot "$MNT" adduser -D -g "${FULLNAME:-$USERNAME}" -s /bin/bash "$USERNAME"
+printf '%s:%s\n' "$USERNAME" "$PWHASH" | chroot "$MNT" chpasswd -e
+for g in wheel audio video input netdev plugdev lp cdrom; do
+	grep -q "^$g:" "$MNT/etc/group" && chroot "$MNT" addgroup "$USERNAME" "$g" >/dev/null 2>&1
+done
+chroot "$MNT" passwd -l root >/dev/null 2>&1 || true
+
+# Einstellungen aus dem Live-System: Sprache/Tastatur/Zeitzone (systemweit + Benutzer), Setup-Auswahl
+set -- $(/usr/libexec/edios-sprache-root zeigen)
+/usr/libexec/edios-sprache-root --root "$MNT" set "$1" "$2" "$3" "$USERNAME"
+H="$MNT/home/$USERNAME"
+if [ -n "$UEB" ] && [ -d "$UEB" ]; then
+	if [ -s "$UEB/dconf/user.ini" ]; then
+		mkdir -p "$H/.config/dconf"
+		dconf compile "$H/.config/dconf/user" "$UEB/dconf" || echo "Hinweis: Einstellungen nicht übernommen" >&2
+	fi
+	if [ -f "$UEB/einrichtung-erledigt" ]; then
+		mkdir -p "$H/.config/edios"
+		echo "ediOS-Einrichtung im Live-System abgeschlossen" > "$H/.config/edios/einrichtung-erledigt"
+		echo "ediOS-Einrichtung im Live-System abgeschlossen" > "$H/.config/edios/einrichtung-angezeigt"
+	fi
+	chroot "$MNT" chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.config"
+fi
+
+step 5
+chroot "$MNT" mkinitfs "$(ls "$MNT/lib/modules" | head -n1)" >/dev/null
+# signierter Kernel: nur ersetzen, wenn der installierte Kernel genau die unsignierte Fassung ist
+h="$(sha256sum < "$MNT/boot/vmlinuz-lts" | cut -d' ' -f1)"
+if [ "$h" = "$(cat "$SB/vmlinuz-lts.unsigned.sha256")" ]; then
+	cp "$SB/vmlinuz-lts" "$MNT/boot/vmlinuz-lts"
+elif [ "$h" != "$(cat "$SB/vmlinuz-lts.signed.sha256")" ]; then
+	die "$(t "Unerwarteter Kernel auf der Zielplatte (Version passt nicht zu $KV)." "Unexpected kernel on the target disk (version does not match $KV).")"
+fi
+chroot "$MNT" grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
+
+E="$MNT/boot/efi/EFI"
+rm -rf "$E/alpine"                 # von setup-disk (unsigniertes GRUB), wird nicht gebraucht
+mkdir -p "$E/edios" "$E/BOOT"
+for f in shimx64.efi grubx64.efi mmx64.efi edios-mok.der; do
+	[ -f "$SB/$f" ] && cp "$SB/$f" "$E/edios/$f"
+done
+cp "$SB/shimx64.efi" "$E/BOOT/BOOTX64.EFI"      # Fallback: startet an jedem PC ueber das Boot-Menue
+cp "$SB/grubx64.efi" "$SB/mmx64.efi" "$E/BOOT/"
+[ -f "$SB/edios-mok.der" ] && cp "$SB/edios-mok.der" "$MNT/boot/efi/edios-mok.der"
+chroot "$MNT" /usr/libexec/edios-grub-stub /
+
+# UEFI-Booteintrag nur bei interner Platte
+if [ "$ART" = intern ]; then
+	mount | grep -q efivars || mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null || true
+	alt="$(efibootmgr 2>/dev/null | sed -n 's/^BootOrder: //p')"
+	neu=""
+	if efibootmgr -q -c -d "$DISK" -p 1 -L "ediOS" -l '\EFI\edios\shimx64.efi'; then
+		# efibootmgr -c setzt den neuen Eintrag an die erste Stelle der BootOrder
+		# (Ausgabe: "Boot0003* ediOS<TAB>HD(...)", darum nicht nach dem Zeilenende suchen)
+		neu="$(efibootmgr 2>/dev/null | sed -n 's/^BootOrder: \([0-9A-Fa-f]\{4\}\).*/\1/p')"
+		efibootmgr 2>/dev/null | grep -q "^Boot$neu\*\{0,1\} ediOS" || neu=""
+	else
+		echo "Hinweis: UEFI-Eintrag nicht angelegt."
+	fi
+	if [ -n "$neu" ] && [ -n "$alt" ] && efibootmgr 2>/dev/null | grep -qi 'Windows Boot Manager'; then
+		efibootmgr -q -o "$alt,$neu" || true          # Windows bleibt an erster Stelle
+		echo "Windows bleibt im Boot-Menue an erster Stelle."
+	fi
+else
+	echo "Externe Platte ($ART): UEFI-Eintraege des PCs werden nicht veraendert."
+fi
+sync
+
+step 6
+echo "@@FERTIG"
+exit 0

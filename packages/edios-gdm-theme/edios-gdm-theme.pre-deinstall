@@ -1,0 +1,4 @@
+#!/bin/sh
+# Original-Look von GNOME zurueck, bevor die ediOS-Dateien verschwinden
+/usr/libexec/edios/edios-gdm-theme-apply restore
+exit 0

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Startet gnome-terminal-server immer mit einer UTF-8-Locale (sonst bricht er ab).
+# Wird ueber den D-Bus-Override in /usr/local/share/dbus-1/services aufgerufen.
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+	*.UTF-8|*.utf8|*.utf-8) ;;
+	*)
+		unset LC_ALL
+		LANG=de_DE.UTF-8
+		[ -r /etc/locale.conf ] && . /etc/locale.conf
+		case "$LANG" in *.UTF-8) ;; *) LANG=C.UTF-8 ;; esac
+		export LANG
+		[ -z "${LANGUAGE:-}" ] || export LANGUAGE
+		;;
+esac
+exec /usr/libexec/gnome-terminal-server "$@"

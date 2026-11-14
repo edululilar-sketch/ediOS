@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+# ediOS Apps: beliebte Programme von Flathub installieren oder entfernen (fuer den aktuellen Benutzer).
+# GPL-3.0-or-later. Texte auf Deutsch und Englisch (Sprache aus LANG).
+# Icons kommen aus den Flathub-Metadaten (flatpak update --appstream), ohne Netz ein Ersatz-Symbol.
+import glob
+import os
+import re
+import sys
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+APP_ID = "org.edios.Apps"
+FLATHUB = "https://dl.flathub.org/repo/flathub.flatpakrepo"
+
+def _lang():
+    for v in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        x = os.environ.get(v, "")
+        if x and x != "C" and not x.startswith(("C.", "POSIX")):
+            return "de" if x.startswith("de") else "en"
+    return "de"
+
+
+L = _lang()
+
+
+def T(de, en):
+    return de if L == "de" else en
+
+
+# (Kategorie de, en, Ersatz-Symbol, [(Flathub-ID, Name, Beschreibung de, en)])
+CATALOG = [
+    ("Spiele", "Games", "applications-games-symbolic", [
+        ("com.valvesoftware.Steam", "Steam", "Die größte Spiele-Plattform für den PC", "The biggest game platform for PC"),
+        ("net.lutris.Lutris", "Lutris", "Alle Spiele an einem Ort, auch Windows-Spiele", "All your games in one place, Windows games too"),
+        ("com.heroicgameslauncher.hgl", "Heroic Games Launcher", "Spiele von Epic Games, GOG und Amazon", "Games from Epic Games, GOG and Amazon"),
+        ("org.prismlauncher.PrismLauncher", "Prism Launcher", "Minecraft starten, mit Mods und mehreren Versionen", "Play Minecraft with mods and several versions"),
+    ]),
+    ("Chat", "Chat", "chat-message-new-symbolic", [
+        ("com.discordapp.Discord", "Discord", "Sprach-, Video- und Text-Chat für Gruppen", "Voice, video and text chat for groups"),
+        ("org.telegram.desktop", "Telegram", "Schneller Messenger mit Gruppen und Kanälen", "Fast messenger with groups and channels"),
+        ("org.signal.Signal", "Signal", "Sicherer Messenger mit Ende-zu-Ende-Verschlüsselung", "Secure messenger with end-to-end encryption"),
+    ]),
+    ("Medien", "Media", "applications-multimedia-symbolic", [
+        ("org.videolan.VLC", "VLC", "Spielt fast jedes Video- und Musikformat ab", "Plays almost every video and music format"),
+        ("com.spotify.Client", "Spotify", "Musik und Podcasts streamen", "Stream music and podcasts"),
+        ("com.obsproject.Studio", "OBS Studio", "Bildschirm aufnehmen und live streamen", "Record your screen and stream live"),
+        ("org.kde.kdenlive", "Kdenlive", "Videos schneiden und bearbeiten", "Cut and edit videos"),
+    ]),
+    ("Kreativ", "Creative", "applications-graphics-symbolic", [
+        ("org.gimp.GIMP", "GIMP", "Fotos bearbeiten und Bilder gestalten", "Edit photos and create images"),
+        ("org.kde.krita", "Krita", "Digital malen und zeichnen", "Digital painting and drawing"),
+        ("org.inkscape.Inkscape", "Inkscape", "Vektorgrafiken, Logos und Plakate", "Vector graphics, logos and posters"),
+        ("org.blender.Blender", "Blender", "3D-Modelle, Animation und Effekte", "3D models, animation and effects"),
+    ]),
+    ("Werkzeuge", "Tools", "applications-utilities-symbolic", [
+        ("com.usebottles.bottles", "Bottles", "Windows-Programme unter Linux ausführen", "Run Windows programs on Linux"),
+        ("com.github.tchx84.Flatseal", "Flatseal", "Rechte von Flatpak-Apps einstellen", "Manage permissions of Flatpak apps"),
+        ("io.missioncenter.MissionCenter", "Mission Center", "Prozessor, Speicher und Grafikkarte im Blick", "Keep an eye on CPU, memory and graphics card"),
+    ]),
+]
+
+ESC = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+def esc(s):
+    return GLib.markup_escape_text(s)
+
+
+def run(argv):
+    """Kurzer Befehl, gibt (rc, stdout) zurueck."""
+    try:
+        ok, out, _err, status = GLib.spawn_sync(None, argv, None, GLib.SpawnFlags.SEARCH_PATH, None)
+        rc = 0 if ok and GLib.spawn_check_wait_status(status) else 1
+        return rc, (out or b"").decode("utf-8", "replace")
+    except GLib.Error:
+        return 1, ""
+
+
+def installed_apps():
+    """{app_id: 'user'|'system'}"""
+    res = {}
+    for scope in ("system", "user"):
+        rc, out = run(["flatpak", "list", f"--{scope}", "--app", "--columns=application"])
+        if rc == 0:
+            for line in out.splitlines():
+                if line.strip():
+                    res[line.strip()] = scope
+    return res
+
+
+def icon_file(app_id):
+    bases = [os.path.join(GLib.get_user_data_dir(), "flatpak"), "/var/lib/flatpak"]
+    for base in bases:
+        for size in ("128x128", "64x64"):
+            for p in glob.glob(f"{base}/appstream/flathub/*/active/icons/{size}/{app_id}.png"):
+                if os.path.exists(p):
+                    return p
+    return None
+
+
+class AppRow(Adw.ActionRow):
+    def __init__(self, win, app_id, name, desc, fallback):
+        super().__init__(title=esc(name), subtitle=esc(desc))
+        self.win, self.app_id, self.desc, self.fallback = win, app_id, desc, fallback
+        self.img = Gtk.Image()
+        self.img.set_pixel_size(48)
+        self.add_prefix(self.img)
+        self.spinner = Adw.Spinner()
+        self.spinner.set_visible(False)
+        self.add_suffix(self.spinner)
+        self.btn = Gtk.Button()
+        self.btn.set_valign(Gtk.Align.CENTER)
+        self.btn.connect("clicked", self.on_click)
+        self.add_suffix(self.btn)
+        self.scope = None
+        self.load_icon()
+
+    def load_icon(self):
+        p = icon_file(self.app_id)
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        if p:
+            self.img.set_from_file(p)
+            self.img.set_pixel_size(48)
+            self.img.remove_css_class("dim-label")
+        elif theme.has_icon(self.app_id):          # schon installiert: Icon der App selbst
+            self.img.set_from_icon_name(self.app_id)
+            self.img.set_pixel_size(48)
+            self.img.remove_css_class("dim-label")
+        else:                                       # ohne Flathub-Daten: dezentes Ersatz-Symbol
+            self.img.set_from_icon_name(self.fallback)
+            self.img.set_pixel_size(32)
+            self.img.set_size_request(48, 48)
+            self.img.add_css_class("dim-label")
+
+    def set_state(self, scope):
+        self.scope = scope
+        for c in ("suggested-action", "destructive-action"):
+            self.btn.remove_css_class(c)
+        if scope:
+            self.btn.set_label(T("Entfernen", "Remove"))
+            self.btn.add_css_class("destructive-action")
+            self.set_subtitle(esc(self.desc) + "  ·  <b>" + T("installiert", "installed") + "</b>")
+        else:
+            self.btn.set_label(T("Installieren", "Install"))
+            self.btn.add_css_class("suggested-action")
+            self.set_subtitle(esc(self.desc))
+
+    def on_click(self, _b):
+        self.win.start(self)
+
+
+class AppsWindow(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="ediOS Apps")
+        self.set_default_size(680, 780)
+        self.busy = None
+        self.rows = []
+
+        self.toasts = Adw.ToastOverlay()
+        tv = Adw.ToolbarView()
+        tv.add_top_bar(Adw.HeaderBar())
+        self.banner = Adw.Banner()
+        tv.add_top_bar(self.banner)
+        self.toasts.set_child(tv)
+        self.set_content(self.toasts)
+
+        page = Adw.PreferencesPage()
+        tv.set_content(page)
+        intro = Adw.PreferencesGroup(
+            title=T("Beliebte Apps von Flathub", "Popular apps from Flathub"),
+            description=T("Ein Klick installiert die App nur für dich. Dafür wird Internet gebraucht; "
+                          "manche Apps sind groß (Steam ca. 1–2 GB). Fertige Apps findest du in der "
+                          "App-Übersicht.",
+                          "One click installs the app just for you. This needs internet; "
+                          "some apps are big (Steam about 1–2 GB). Installed apps appear in the "
+                          "app overview."))
+        page.add(intro)
+        for cat_de, cat_en, fallback, apps in CATALOG:
+            g = Adw.PreferencesGroup(title=T(cat_de, cat_en))
+            for app_id, name, desc_de, desc_en in apps:
+                r = AppRow(self, app_id, name, T(desc_de, desc_en), fallback)
+                self.rows.append(r)
+                g.add(r)
+            page.add(g)
+
+        if run(["flatpak", "--version"])[0] != 0:
+            self.banner.set_title(T("Flatpak ist nicht installiert. Ohne Flatpak kann hier nichts installiert werden.",
+                                    "Flatpak is not installed. Without Flatpak nothing can be installed here."))
+            self.banner.set_revealed(True)
+            for r in self.rows:
+                r.btn.set_sensitive(False)
+        self.refresh()
+        GLib.idle_add(self.fetch_metadata)
+
+    # --- Zustand ---
+    def refresh(self):
+        inst = installed_apps()
+        for r in self.rows:
+            r.set_state(inst.get(r.app_id))
+            r.btn.set_sensitive(self.busy is None)
+
+    def toast(self, text):
+        t = Adw.Toast(title=text)
+        t.set_timeout(5)
+        self.toasts.add_toast(t)
+
+    # --- Flathub-Metadaten (fuer Icons), still im Hintergrund ---
+    def fetch_metadata(self):
+        cmd = ("flatpak remote-add --user --if-not-exists flathub " + FLATHUB +
+               " && flatpak update --user --appstream flathub")
+        try:
+            p = Gio.Subprocess.new(["sh", "-c", cmd],
+                                   Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
+            p.wait_async(None, self.on_metadata)
+        except GLib.Error:
+            pass
+        return False
+
+    def on_metadata(self, p, res):
+        try:
+            p.wait_finish(res)
+        except GLib.Error:
+            return
+        if p.get_successful():
+            for r in self.rows:
+                r.load_icon()
+        else:
+            self.banner.set_title(T("Flathub ist gerade nicht erreichbar. Bitte prüfe die Internetverbindung.",
+                                    "Flathub cannot be reached right now. Please check the internet connection."))
+            self.banner.set_revealed(True)
+
+    # --- Installieren / Entfernen ---
+    def start(self, row):
+        if self.busy:
+            return
+        name = re.sub("<[^>]*>", "", row.get_title())
+        if row.scope:
+            d = Adw.AlertDialog(heading=T(f"{name} entfernen?", f"Remove {name}?"),
+                                body=T("Die App wird gelöscht. Deine eigenen Dateien bleiben erhalten.",
+                                       "The app will be deleted. Your own files are kept."))
+            d.add_response("cancel", T("Abbrechen", "Cancel"))
+            d.add_response("remove", T("Entfernen", "Remove"))
+            d.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
+            d.set_default_response("cancel")
+            d.connect("response", lambda _d, resp: resp == "remove" and self.go(row, name, False))
+            d.present(self)
+        else:
+            self.go(row, name, True)
+
+    def go(self, row, name, install):
+        self.busy = row
+        for r in self.rows:
+            r.btn.set_sensitive(False)
+        row.btn.set_visible(False)
+        row.spinner.set_visible(True)
+        row.set_subtitle(T("Wird installiert …", "Installing …") if install else T("Wird entfernt …", "Removing …"))
+        if install:
+            cmd = ["sh", "-c",
+                   f"flatpak remote-add --user --if-not-exists flathub {FLATHUB} && "
+                   f"exec flatpak install --user -y --noninteractive flathub {row.app_id}"]
+        else:
+            cmd = ["flatpak", "uninstall", f"--{row.scope}", "-y", "--noninteractive", row.app_id]
+        self.log = []
+        try:
+            p = Gio.Subprocess.new(cmd, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
+        except GLib.Error as e:
+            self.finish(row, name, install, False, str(e))
+            return
+        stream = Gio.DataInputStream.new(p.get_stdout_pipe())
+        stream.set_newline_type(Gio.DataStreamNewlineType.ANY)
+        self.read_line(stream, row)
+        p.wait_async(None, lambda pr, res: self.on_done(pr, res, row, name, install))
+
+    def read_line(self, stream, row):
+        def cb(s, res):
+            try:
+                line, _l = s.read_line_finish_utf8(res)
+            except GLib.Error:
+                return
+            if line is None:
+                return
+            line = ESC.sub("", line).strip()
+            if line:
+                self.log.append(line)
+                self.log = self.log[-20:]
+                pct = re.findall(r"(\d{1,3})%", line)
+                if pct:
+                    row.set_subtitle(T("Wird geladen …", "Downloading …") + f" {pct[-1]} %")
+            self.read_line(s, row)
+        stream.read_line_async(GLib.PRIORITY_DEFAULT, None, cb)
+
+    def on_done(self, p, res, row, name, install):
+        try:
+            p.wait_finish(res)
+            ok = p.get_successful()
+        except GLib.Error:
+            ok = False
+        self.finish(row, name, install, ok, "\n".join(self.log[-6:]))
+
+    def finish(self, row, name, install, ok, detail):
+        self.busy = None
+        row.spinner.set_visible(False)
+        row.btn.set_visible(True)
+        self.refresh()
+        row.load_icon()
+        row.btn.grab_focus()            # Tastaturfokus zurueck auf den Knopf der App
+        if ok:
+            self.toast(T(f"{name} ist installiert. Du findest es in der App-Übersicht.",
+                         f"{name} is installed. You can find it in the app overview.") if install
+                       else T(f"{name} wurde entfernt.", f"{name} was removed."))
+            return
+        why = T("Häufigste Ursache: keine Internetverbindung oder zu wenig Speicherplatz.",
+                "Most common cause: no internet connection or not enough disk space.")
+        if re.search(r"No space|ENOSPC", detail, re.I):
+            why = T("Auf dem Laufwerk ist nicht genug Platz frei.", "There is not enough free space on the drive.")
+        elif re.search(r"resolve|network|connect|timed out|Could not|curl", detail, re.I):
+            why = T("Flathub ist nicht erreichbar. Bitte prüfe die Internetverbindung.",
+                    "Flathub cannot be reached. Please check the internet connection.")
+        d = Adw.AlertDialog(heading=T(f"{name}: das hat nicht geklappt", f"{name}: that did not work"),
+                            body=f"{why}\n\n" + T("Letzte Meldungen:", "Last messages:") + f"\n{detail}")
+        d.add_response("ok", "OK")
+        d.present(self)
+
+
+class App(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+
+    def do_activate(self):
+        win = self.get_active_window() or AppsWindow(self)
+        win.present()
+
+
+if __name__ == "__main__":
+    sys.exit(App().run([sys.argv[0]]))

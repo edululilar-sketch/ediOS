@@ -1,0 +1,7 @@
+#!/bin/sh
+# abuild verbietet /usr/local in Paketen: D-Bus-Override fuer gnome-terminal (UTF-8-Wrapper) dorthin kopieren
+src=/usr/share/edios/dbus/org.gnome.Terminal.service
+dst=/usr/local/share/dbus-1/services/org.gnome.Terminal.service
+mkdir -p "${dst%/*}"
+cmp -s "$src" "$dst" 2>/dev/null || cp "$src" "$dst"
+exit 0

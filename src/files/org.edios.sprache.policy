@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>ediOS</vendor>
+  <action id="org.edios.sprache">
+    <description>Set language, keyboard and time zone</description>
+    <description xml:lang="de">Sprache, Tastatur und Zeitzone einstellen</description>
+    <message>Authentication is required to change the system language, keyboard and time zone.</message>
+    <message xml:lang="de">Zum Ändern von Sprache, Tastatur und Zeitzone wird dein Passwort gebraucht.</message>
+    <icon_name>edios-einrichtung</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/edios-sprache-root</annotate>
+  </action>
+</policyconfig>

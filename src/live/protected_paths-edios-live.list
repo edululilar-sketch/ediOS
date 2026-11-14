@@ -1,0 +1,17 @@
+-etc/apk/commit_hooks.d/edios-secureboot.sh
+-etc/conf.d/liveuser
+-etc/doas.d/edios-live.conf
+-etc/init.d/edios-live
+-etc/runlevels/default/edios-live
+-etc/gdm/custom.conf
+-etc/dconf/profile/user
+-etc/dconf/db/live
+-etc/edios/dconf-live
+-etc/update-grub.conf
+-etc/apk/protected_paths.d/edios-live.list
+-etc/init.d/edios-toram
+-etc/runlevels/boot/edios-toram
+-etc/xdg/autostart/edios-toram-hinweis.desktop
+-usr/libexec/edios-toram-hinweis
+-etc/init.d/edios-firmware
+-etc/runlevels/sysinit/edios-firmware

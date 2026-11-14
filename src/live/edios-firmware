@@ -1,0 +1,22 @@
+#!/sbin/openrc-run
+# ediOS Live-System: Firmware aus dem modloop fuer den Kernel bereitstellen. GPL-3.0-or-later
+# Alpines modloop-Dienst verlinkt /lib/firmware nur, wenn der Ordner leer ist. Pakete wie sof-firmware legen dort
+# aber schon Dateien ab, dann waere die Firmware im modloop (Grafik, WLAN, Bluetooth) fuer den Kernel unsichtbar.
+# Darum: den zusaetzlichen Suchpfad des Kernels auf den modloop setzen, bevor udev die Treiber laedt.
+# Nur im Live-System (im installierten System liegt die Firmware als Pakete in /lib/firmware).
+description="ediOS: Firmware aus dem modloop bereitstellen"
+
+depend() {
+	after modloop
+	before udev-trigger hwdrivers modules
+	keyword -lxc -docker
+}
+
+start() {
+	fw=/.modloop/modules/firmware
+	[ -d "$fw" ] || return 0
+	[ -L /lib/firmware ] && return 0
+	ebegin "Firmware aus dem modloop / firmware from modloop"
+	printf '%s' "$fw" > /sys/module/firmware_class/parameters/path
+	eend $?
+}

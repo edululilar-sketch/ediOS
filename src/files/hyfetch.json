@@ -1,0 +1,13 @@
+{
+    "preset": "#4F6DFF,#6E63FA,#8B5CF6,#A97EFA,#C9A6FF",
+    "mode": "rgb",
+    "auto_detect_light_dark": false,
+    "light_dark": "dark",
+    "lightness": null,
+    "color_align": {"mode": "horizontal"},
+    "backend": "fastfetch",
+    "args": null,
+    "distro": null,
+    "pride_month_disable": true,
+    "custom_ascii_path": "/etc/fastfetch/edios-hyfetch.txt"
+}

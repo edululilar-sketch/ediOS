@@ -1,0 +1,56 @@
+#!/sbin/openrc-run
+# ediOS Live-System: "komplett in den RAM laden" (Bootmenue-Eintrag mit edios.toram). GPL-3.0-or-later
+# Kopiert den ganzen Startdatentraeger (Pakete fuer den Installer, Kernelmodule/Firmware = modloop) in den
+# Arbeitsspeicher, haengt den modloop aus der Kopie ein und haengt den USB-Stick aus. Danach kann der Stick
+# abgezogen werden; auch der Installer arbeitet dann mit der Kopie. Ohne genug RAM bleibt alles beim Alten
+# (Hinweis nach dem Anmelden). Nur im Live-System; der Installer entfernt diesen Dienst.
+description="ediOS komplett in den Arbeitsspeicher laden"
+S=/run/edios-toram
+
+depend() {
+	need modloop localmount
+	before edios-live gdm networkmanager
+}
+
+start() {
+	grep -qw edios.toram /proc/cmdline || return 0
+	mkdir -p "$S"
+	media=""
+	for f in /media/*/apks/.boot_repository; do
+		[ -f "$f" ] && { media="${f%/apks/.boot_repository}"; break; }
+	done
+	if [ -z "$media" ]; then echo "kein-medium" > "$S/status"; return 0; fi
+	need_mb=$(( $(du -sm "$media" | cut -f1) + 64 ))
+	avail_mb=$(( $(awk '/^MemAvailable:/ {print $2}' /proc/meminfo) / 1024 ))
+	total_mb=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024 ))
+	# Kopie + mindestens 2,5 GB fuer Desktop und Programme
+	if [ "$avail_mb" -lt $(( need_mb + 2500 )) ]; then
+		echo "zu-wenig-ram $total_mb $(( need_mb + 2500 + total_mb - avail_mb ))" > "$S/status"
+		ewarn "Zu wenig Arbeitsspeicher fuer 'komplett in den RAM laden' / not enough memory ($total_mb MB)"
+		return 0
+	fi
+	ebegin "ediOS wird in den Arbeitsspeicher kopiert / copying ediOS to memory ($need_mb MB)"
+	mkdir -p "$S/medium"
+	mount -t tmpfs -o "size=${need_mb}m,mode=755" edios-toram "$S/medium" || { eend 1; echo fehler > "$S/status"; return 0; }
+	if ! cp -a "$media/." "$S/medium/"; then
+		umount "$S/medium"; echo fehler > "$S/status"; eend 1; return 0
+	fi
+	eend 0
+	# Kernelmodule und Firmware ab jetzt aus der Kopie
+	ld="$(awk '$2 == "/.modloop" {print $1; exit}' /proc/mounts)"
+	ml="$(cat "/sys/block/${ld#/dev/}/loop/backing_file" 2>/dev/null)"
+	if [ -n "$ml" ] && [ -f "$S/medium/${ml#"$media"/}" ]; then
+		umount -d -l /.modloop 2>/dev/null
+		mount -o loop,ro "$S/medium/${ml#"$media"/}" /.modloop
+	fi
+	# Paketquelle des Live-Systems auf die Kopie umstellen
+	sed -i "s|^$media/apks\$|$S/medium/apks|" /etc/apk/repositories
+	# den Stick merken (der Installer bietet ihn nie an) und aushaengen
+	dev="$(awk -v m="$media" '$2 == m {print $1; exit}' /proc/mounts)"
+	pk="$(lsblk -no PKNAME "$dev" 2>/dev/null | head -n1)"
+	echo "/dev/${pk:-${dev#/dev/}}" > "$S/bootdisk"
+	sync
+	umount "$media" 2>/dev/null || umount -l "$media" 2>/dev/null
+	echo ok > "$S/status"
+	return 0
+}

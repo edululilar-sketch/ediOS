@@ -1,0 +1,8 @@
+{
+  "uuid": "edios-session@edios",
+  "name": "ediOS Sitzung",
+  "description": "Teil von ediOS: sorgt dafür, dass Ausschalten, Neustart und Abmelden sofort klappen (bitte eingeschaltet lassen). / Part of ediOS: makes power off, restart and log out work immediately (please keep enabled).",
+  "shell-version": ["50"],
+  "session-modes": ["user", "unlock-dialog"],
+  "url": "https://github.com/edululilar-sketch/ediOS"
+}

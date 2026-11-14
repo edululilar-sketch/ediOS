@@ -1,0 +1,71 @@
+#!/bin/sh
+# GPL-3.0-or-later
+# ediOS: schreibt die kleine grub.cfg neben den signierten GRUB in der EFI-Partition
+# (EFI/edios/grub.cfg und EFI/BOOT/grub.cfg).
+#   edios-grub-stub [ZIEL]     ZIEL = Wurzel des Systems (Standard /), EFI-Partition unter ZIEL/boot/efi
+# Der Haupteintrag wird aus /boot/grub/grub.cfg (grub-mkconfig) uebernommen und prueft, ob GRUB den
+# Kernel laden darf; sonst kommt die Secure-Boot-Hilfe. Die normale grub.cfg bleibt unter
+# "Weitere Startoptionen" erreichbar. Texte in der Systemsprache (/etc/edios/sprache.conf), nur ASCII
+# (GRUB hat keine Unicode-Schrift). Aufgerufen vom Installer und nach jedem apk-Vorgang.
+set -eu
+R="${1:-/}"; R="${R%/}"
+SB="$R/usr/share/edios/secureboot"
+CFG="$R/boot/grub/grub.cfg"
+ESP="$R/boot/efi/EFI"
+[ -f "$CFG" ] || { echo "edios-grub-stub: $CFG fehlt" >&2; exit 1; }
+[ -f "$ESP/edios/grubx64.efi" ] || { echo "edios-grub-stub: EFI-Partition nicht unter $R/boot/efi eingehaengt" >&2; exit 1; }
+
+# erster Eintrag aus grub.cfg: search-Zeile (UUID), linux- und initrd-Zeile
+eval "$(awk '
+	/^[[:space:]]*menuentry[[:space:]]/ { n++ }
+	n == 1 && /^[[:space:]]*search[[:space:]].*--set=root/ && u == "" { u = $NF }
+	n == 1 && /^[[:space:]]*linux[[:space:]]/  && l == "" { sub(/^[[:space:]]*linux[[:space:]]+/, ""); l = $0 }
+	n == 1 && /^[[:space:]]*initrd[[:space:]]/ && i == "" { sub(/^[[:space:]]*initrd[[:space:]]+/, ""); i = $0 }
+	END {
+		gsub(/\047/, "", u); gsub(/\047/, "", l); gsub(/\047/, "", i)
+		printf "UUID=\047%s\047\nLINUX=\047%s\047\nINITRD=\047%s\047\n", u, l, i
+	}' "$CFG")"
+[ -n "$UUID" ] && [ -n "$LINUX" ] || { echo "edios-grub-stub: Eintrag in $CFG nicht erkannt" >&2; exit 1; }
+TITLE="$(sed -n 's/^PRETTY_NAME="\(.*\)"$/\1/p' "$R/etc/os-release" 2>/dev/null)"
+TITLE="${TITLE:-ediOS}"
+SPRACHE=de
+# shellcheck disable=SC1091
+[ -r "$R/etc/edios/sprache.conf" ] && . "$R/etc/edios/sprache.conf"
+if [ "$SPRACHE" = de ]; then
+	T_MEHR="Weitere Startoptionen"; T_MOK="ediOS-Schluessel eintragen (MOK-Manager)"; T_FW="UEFI-Setup oeffnen (z. B. Secure Boot aus)"
+else
+	T_MEHR="Advanced options"; T_MOK="Enroll ediOS key (MOK manager)"; T_FW="Open UEFI setup (e.g. Secure Boot off)"
+fi
+
+tmp="$(mktemp)"
+{
+	echo "# ediOS: automatisch erzeugt von edios-grub-stub (wird bei Updates neu geschrieben)"
+	echo "search --no-floppy --fs-uuid --set=root $UUID"
+	echo 'set prefix=($root)/boot/grub'
+	echo "set default=0"
+	echo "set timeout=3"
+	cat "$SB/grub-hilfe.cfg"
+	echo ""
+	echo "menuentry \"$TITLE\" --id edios {"
+	echo "	if linux $LINUX; then"
+	[ -z "$INITRD" ] || echo "		initrd $INITRD"
+	echo "	else"
+	echo "		edios_sb_hilfe"
+	echo "	fi"
+	echo "}"
+	echo "submenu \"$T_MEHR\" --id edios-mehr {"
+	echo '	configfile ($root)/boot/grub/grub.cfg'
+	echo "}"
+	echo ""
+	echo "menuentry \"$T_MOK\" --id edios-mok {"
+	echo '	chainloader $edios_efidir/mmx64.efi'
+	echo "}"
+	echo "menuentry \"$T_FW\" --id edios-fwsetup {"
+	echo "	fwsetup"
+	echo "}"
+} > "$tmp"
+for d in edios BOOT; do
+	[ -d "$ESP/$d" ] || continue
+	cmp -s "$tmp" "$ESP/$d/grub.cfg" 2>/dev/null || cp "$tmp" "$ESP/$d/grub.cfg"
+done
+rm -f "$tmp"

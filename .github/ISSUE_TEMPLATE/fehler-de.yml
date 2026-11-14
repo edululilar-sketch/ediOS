@@ -1,0 +1,60 @@
+name: Fehler melden (Deutsch)
+description: Etwas funktioniert in ediOS nicht so, wie es soll.
+title: "[Fehler] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke, dass du hilfst, ediOS besser zu machen! Bitte schreibe **keine Passwörter oder persönlichen Daten** in die Meldung.
+  - type: input
+    id: version
+    attributes:
+      label: ediOS-Version
+      description: Steht unter Einstellungen → System → Info, oder im Terminal mit `cat /etc/os-release`.
+      placeholder: "ediOS 1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: wo
+    attributes:
+      label: Wo tritt der Fehler auf?
+      options:
+        - Live-System (vom USB-Stick)
+        - Installiertes ediOS
+        - Beim Erstellen des USB-Sticks / Starten vom Stick
+        - Beim Installieren
+        - Bei Updates („ediOS aktualisieren“)
+        - Anderes
+    validations:
+      required: true
+  - type: textarea
+    id: was
+    attributes:
+      label: Was ist passiert?
+      description: Beschreibe kurz, was du gemacht hast und was dann passiert ist.
+    validations:
+      required: true
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Was hättest du erwartet?
+  - type: textarea
+    id: schritte
+    attributes:
+      label: Wie kann man den Fehler nachstellen?
+      placeholder: |
+        1. …
+        2. …
+        3. …
+  - type: textarea
+    id: pc
+    attributes:
+      label: Dein PC
+      description: Hersteller/Modell, Grafikkarte, WLAN-Chip, Secure Boot an oder aus. Hilfreich ist die Ausgabe von `fastfetch` im Terminal.
+  - type: textarea
+    id: log
+    attributes:
+      label: Meldungen / Protokolle (optional)
+      description: Fehlermeldungen oder Bildschirmfotos. Protokolle z. B. aus `/var/log/messages` oder `~/.cache/gdm/session.log`.
+      render: text

@@ -1,0 +1,26 @@
+# Bau-Ergebnisse und Caches (nie in Git)
+cache/
+out/
+*.log
+.testtmp/
+repo/
+packages/.build/
+
+# Schluessel: liegen nur in ~/ediOS-keys/ (nie im Projekt, nie in Git)
+*.key
+*.pem
+*.p12
+*.pfx
+*.priv
+*.rsa
+ediOS-keys/
+keys/
+
+# Oeffentliche Schluessel/Zertifikate sind gewollt im Repo (src/pubkeys), private nie
+!src/pubkeys/
+!src/pubkeys/edios-repo.rsa.pub
+!src/pubkeys/edios-mok.crt
+!src/pubkeys/edios-mok.der
+
+# Python-Zwischendateien
+__pycache__/

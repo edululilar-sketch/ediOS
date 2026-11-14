@@ -1,0 +1,20 @@
+# ediOS Paketquelle und oeffentlicher Schluessel. Eigenes Paket, damit beides bleibt, auch wenn
+# edios-base entfernt wird (dann laesst es sich jederzeit wieder installieren).
+pkgname=edios-keyring
+pkgver=1.0.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
+pkgrel=0
+pkgdesc="ediOS package source and public signing key"
+url="https://github.com/edululilar-sketch/ediOS"
+arch="noarch"
+license="GPL-3.0-or-later"
+options="!check"
+source=""
+
+package() {
+	local s="$startdir/edios-src"
+	install -Dm644 "$s/files/edios.list" "$pkgdir/etc/apk/repositories.d/edios.list"
+	local k
+	for k in "$s"/pubkeys/*.rsa.pub; do
+		install -Dm644 "$k" "$pkgdir/etc/apk/keys/${k##*/}"
+	done
+}

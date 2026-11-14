@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ediOS update check
+Name[de]=ediOS Update-Hinweis
+Comment=Checks once a week whether updates are available (installs nothing automatically)
+Comment[de]=Einmal pro Woche nachsehen, ob es Updates gibt (installiert nichts automatisch)
+Exec=/usr/libexec/edios-update-check
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=30

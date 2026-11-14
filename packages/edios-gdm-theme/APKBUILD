@@ -1,0 +1,27 @@
+# ediOS: Anmelde- und Sperrbildschirm (GDM). Baut das Theme nach jedem gnome-shell-Update neu ein.
+# Quellen kommen aus src/ des Projekts (build-repo.sh kopiert sie nach $startdir/edios-src).
+pkgname=edios-gdm-theme
+pkgver=1.0.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
+pkgrel=0
+pkgdesc="ediOS login and lock screen (rebuilt after gnome-shell updates)"
+url="https://github.com/edululilar-sketch/ediOS"
+arch="x86_64"
+license="GPL-3.0-or-later AND LGPL-2.1-or-later"
+depends="glib /bin/sh"
+makedepends="glib-dev"
+install="$pkgname.post-install $pkgname.pre-deinstall"
+triggers="$pkgname.trigger=/usr/share/gnome-shell"
+options="!check"
+source=""
+
+package() {
+	local s="$startdir/edios-src"
+	install -Dm755 "$s/files/edios-gdm-theme" "$pkgdir/etc/init.d/edios-gdm-theme"
+	install -Dm755 "$s/files/edios-gdm-theme-apply" "$pkgdir/usr/libexec/edios/edios-gdm-theme-apply"
+	# Werkzeuge aus glib-dev, LGPL-2.1-or-later (sonst muesste glib-dev auf jedem System installiert sein)
+	install -Dm755 /usr/bin/gresource "$pkgdir/usr/libexec/edios/gresource"
+	install -Dm755 /usr/bin/glib-compile-resources "$pkgdir/usr/libexec/edios/glib-compile-resources"
+	install -Dm644 "$s/files/edios-login.css" "$pkgdir/usr/share/edios/gdm/edios-login.css"
+	install -Dm644 "$s/icons/edios-login-bg.jpg" "$pkgdir/usr/share/edios/gdm/edios-login-bg.jpg"
+	install -Dm644 "$s/icons/edios-logo-login.png" "$pkgdir/usr/share/edios/gdm/edios-logo-login.png"
+}

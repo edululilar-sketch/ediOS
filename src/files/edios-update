@@ -1,0 +1,149 @@
+#!/bin/sh
+# ediOS aktualisieren / Update ediOS (GPL-3.0-or-later)
+# Bringt alle Systempakete (Alpine und ediOS, per apk) und die Flatpak-Apps auf den neuesten Stand.
+# Der root-Teil (/usr/libexec/edios-update-root) laeuft per pkexec (Passwortfenster) oder, im Live-System,
+# per doas ohne Passwort.
+. /usr/share/edios/i18n.sh
+TITLE="$(t "ediOS aktualisieren" "Update ediOS")"
+RUN="${XDG_RUNTIME_DIR:-/tmp}"
+LOG="$RUN/edios-update.log"
+RC="$LOG.rc"
+STAMP_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/edios"
+
+z() { zenity "$@" 2>/dev/null; }
+err() { z --error --title "$TITLE" --width 560 --text "$1"; exit 1; }
+esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+# Nur ein Fenster gleichzeitig
+exec 9>"$RUN/edios-update.lock"
+flock -n 9 || { z --info --title "$TITLE" --width 420 --text "$(t "Die Aktualisierung läuft bereits." "The update is already running.")"; exit 0; }
+
+if [ -e /etc/conf.d/liveuser ]; then
+	z --question --title "$TITLE" --width 500 --ok-label "$(t "Trotzdem aktualisieren" "Update anyway")" --cancel-label "$(t "Abbrechen" "Cancel")" \
+		--text "$(t "Du nutzt gerade das <b>Live-System</b>.\n\nUpdates landen hier nur im Arbeitsspeicher und sind nach einem Neustart wieder weg. Sinnvoll ist das Aktualisieren erst nach der Installation." \
+		"You are using the <b>live system</b>.\n\nUpdates only go to memory here and are gone after a restart. Updating makes sense after the installation.")" || exit 0
+else
+	z --question --title "$TITLE" --width 500 --ok-label "$(t "Jetzt aktualisieren" "Update now")" --cancel-label "$(t "Abbrechen" "Cancel")" \
+		--text "$(t "ediOS (Alpine- und ediOS-Pakete) und alle Apps werden auf den neuesten Stand gebracht.\n\nDafür wird eine Internetverbindung gebraucht, und gleich wird nach deinem Passwort gefragt. Das kann einige Minuten dauern." \
+		"ediOS (Alpine and ediOS packages) and all apps will be brought up to date.\n\nThis needs an internet connection, and you will be asked for your password. It can take a few minutes.")" || exit 0
+fi
+
+# --- Akku: bei schwachem Akku ohne Netzteil warnen ---
+for b in /sys/class/power_supply/BAT*; do
+	[ -r "$b/capacity" ] || continue
+	cap="$(cat "$b/capacity" 2>/dev/null)"; st="$(cat "$b/status" 2>/dev/null)"
+	if [ "$st" = Discharging ] && [ "${cap:-100}" -lt 30 ]; then
+		z --question --title "$TITLE" --width 500 --icon-name battery-caution \
+			--ok-label "$(t "Trotzdem aktualisieren" "Update anyway")" --cancel-label "$(t "Abbrechen" "Cancel")" \
+			--text "$(t "Der Akku ist nur noch zu <b>$cap %</b> geladen.\n\nBitte schließe das Netzteil an. Geht der Strom mitten im Update aus, kann ediOS danach beschädigt sein." \
+			"The battery is only at <b>$cap %</b>.\n\nPlease plug in the charger. If power runs out in the middle of an update, ediOS can be damaged.")" || exit 0
+		break
+	fi
+done
+
+# --- Internet pruefen (erster Netz-Paketmirror aus /etc/apk/repositories) ---
+URL="$(grep -m 1 '^https\?://' /etc/apk/repositories 2>/dev/null)"
+URL="${URL:-https://dl-cdn.alpinelinux.org/alpine}"
+if ! wget -q --spider -T 10 "$URL/x86_64/APKINDEX.tar.gz" 2>/dev/null \
+	&& ! curl -fsI -m 10 "$URL/x86_64/APKINDEX.tar.gz" >/dev/null 2>&1; then
+	err "$(t "<b>Keine Verbindung zum Paket-Server.</b>\n\nBitte prüfe die Internetverbindung (oben rechts im Netzwerk-Menü) und versuche es dann noch einmal." \
+		"<b>No connection to the package server.</b>\n\nPlease check the internet connection (network menu at the top right) and try again.")"
+fi
+
+# --- Wie werden wir root? ---
+if doas -n true 2>/dev/null; then
+	ROOT="doas -n"                                  # Live-System: ohne Passwort
+elif command -v pkexec >/dev/null 2>&1; then
+	ROOT="pkexec"                                   # fragt im Fenster nach dem Passwort
+else
+	err "$(t "Es fehlt pkexec (polkit). Ohne das kann ediOS nicht nach dem Passwort fragen." "pkexec (polkit) is missing. Without it ediOS cannot ask for the password.")"
+fi
+
+: > "$LOG"; rm -f "$RC"
+(
+	# shellcheck disable=SC2086 # ROOT ist bewusst "doas -n"
+	$ROOT /usr/libexec/edios-update-root >>"$LOG" 2>&1
+	rc=$?
+	if [ "$rc" = 0 ] && command -v flatpak >/dev/null 2>&1 && [ -n "$(flatpak remotes --user 2>/dev/null)" ]; then
+		echo "@@SCHRITT 4" >>"$LOG"
+		flatpak update --user -y --noninteractive >>"$LOG" 2>&1 || rc=13
+	fi
+	echo "$rc" > "$RC"
+) &
+JOB=$!
+
+# --- Fortschritt: Schritte aus "@@SCHRITT n", Pakete aus apk-Zeilen "(12/40) Upgrading ..." ---
+(
+	while kill -0 "$JOB" 2>/dev/null; do
+		n="$(sed -n 's/^@@SCHRITT \([0-9]\).*/\1/p' "$LOG" | tail -n 1)"
+		case "$n" in
+			1) pct=3; text="$(t "Paketlisten werden geladen" "Loading package lists")" ;;
+			2)
+				text="$(t "Systempakete werden aktualisiert" "Updating system packages")"
+				ij="$(grep -o '^([0-9]*/[0-9]*)' "$LOG" | tail -n 1 | tr -d '()')"
+				i="${ij%/*}"; j="${ij#*/}"
+				if [ -n "$ij" ] && [ "${j:-0}" -gt 0 ]; then
+					pct=$(( 5 + 75 * i / j )); text="$text ($i $(t von of) $j)"
+				else pct=5; fi ;;
+			3) pct=82; text="$(t "Flatpak-Apps (für alle Benutzer) werden aktualisiert" "Updating Flatpak apps (all users)")" ;;
+			4) pct=92; text="$(t "Deine Flatpak-Apps werden aktualisiert" "Updating your Flatpak apps")" ;;
+			*) pct=1; text="$(t "Warte auf das Passwort …" "Waiting for the password …")" ;;
+		esac
+		line="$(tr '\r' '\n' < "$LOG" | grep -v '^@@' | grep '[[:alnum:]]' | tail -n 1 | cut -c1-80 | esc)"
+		printf '%s\n# %s   –   %s\n' "$pct" "$text" "${line:-...}"
+		sleep 1
+	done
+	echo 100
+) | z --progress --no-cancel --auto-close --title "$TITLE" --width 640 --text "$(t "Starte …" "Starting …")"
+wait "$JOB"
+rc="$(cat "$RC" 2>/dev/null)"
+
+# --- Ergebnis ---
+if [ "$rc" = 0 ]; then
+	mkdir -p "$STAMP_DIR" && touch "$STAMP_DIR/update-check"   # woechentlicher Hinweis beginnt neu
+	n="$(grep -c '^([0-9]*/[0-9]*) \(Upgrading\|Installing\|Replacing\)' "$LOG")"
+	if [ "$n" = 0 ]; then
+		msg="$(t "Fertig. ediOS ist schon auf dem neuesten Stand." "Done. ediOS is already up to date.")"
+	else
+		msg="$(t "Fertig. ediOS ist jetzt auf dem neuesten Stand ($n Pakete aktualisiert)." "Done. ediOS is now up to date ($n packages updated).")"
+		if grep -q '^([0-9]*/[0-9]*) Upgrading \(linux-lts\|musl\|gnome-shell\|mutter\|gdm\|edios-[a-z-]*\) ' "$LOG"; then
+			msg="$msg\n\n$(t "Bitte starte den Rechner neu, damit alle Änderungen wirken." "Please restart the computer so that all changes take effect.")"
+		fi
+	fi
+	if grep -q '^@@HINWEIS edios-weg' "$LOG"; then
+		msg="$msg\n\n<small>$(t "Hinweis: Die ediOS-Paketquelle war gerade nicht erreichbar. Alle übrigen Updates wurden installiert." "Note: the ediOS package source was not reachable. All other updates were installed.")</small>"
+	fi
+	if grep -q '^@@HINWEIS schluessel' "$LOG"; then
+		msg="$msg\n\n<small>$(t "Hinweis: Der ediOS-Schlüssel fehlt (Paket edios-keyring). ediOS-Pakete werden deshalb abgelehnt." "Note: the ediOS key is missing (package edios-keyring). ediOS packages are therefore rejected.")</small>"
+	fi
+	z --info --title "$TITLE" --width 480 --text "$msg"
+	exit 0
+fi
+
+last="$(tr '\r' '\n' < "$LOG" | grep -v '^@@' | grep . | tail -n 6 | cut -c1-100 | esc)"
+case "$rc" in
+	126) exit 0 ;;   # Passwortfenster abgebrochen: kein Fehler
+	127) err "$(t "Das hat nicht geklappt: Das Passwort war falsch, oder dein Benutzer darf das System nicht aktualisieren (er muss Administrator sein)." \
+		"That did not work: the password was wrong, or your user is not allowed to update the system (it must be an administrator).")" ;;
+esac
+if grep -qi 'No space left\|ENOSPC\|disk full' "$LOG"; then
+	why="$(t "Auf dem Laufwerk ist nicht mehr genug Platz frei. Lösche ein paar große Dateien (z. B. im Download-Ordner) und versuche es noch einmal." \
+		"There is not enough free space on the drive. Delete some large files (e.g. in the Downloads folder) and try again.")"
+elif grep -qi 'lock database\|database is locked\|Resource temporarily unavailable' "$LOG"; then
+	why="$(t "Gerade installiert ein anderes Programm Software (z. B. GNOME Software). Warte, bis es fertig ist, und versuche es dann noch einmal." \
+		"Another program is installing software right now (e.g. GNOME Software). Wait until it has finished and try again.")"
+elif grep -qi 'UNTRUSTED\|BAD signature' "$LOG"; then
+	why="$(t "Ein Paket hatte eine ungültige Signatur und wurde zur Sicherheit nicht installiert. Versuche es später noch einmal." \
+		"A package had an invalid signature and was not installed for safety. Please try again later.")"
+elif grep -qi 'temporary error\|network\|DNS\|resolve\|connect\|timed out\|fetch.*fail\|could not\|unreachable' "$LOG" || [ "$rc" = 10 ]; then
+	why="$(t "Die Verbindung zum Paket-Server ist abgebrochen. Bitte prüfe die Internetverbindung und versuche es noch einmal." \
+		"The connection to the package server was lost. Please check the internet connection and try again.")"
+elif grep -qi 'unable to select packages\|unsatisfiable\|breaks:\|conflicts' "$LOG"; then
+	why="$(t "Einige Pakete passen gerade nicht zusammen (das passiert manchmal kurz nach einem großen Update der Paketquellen). Versuche es in ein paar Stunden noch einmal." \
+		"Some packages do not fit together right now (this sometimes happens shortly after a big update of the package sources). Please try again in a few hours.")"
+elif [ "$rc" = 12 ] || [ "$rc" = 13 ]; then
+	why="$(t "Die Systempakete sind aktuell, aber die Flatpak-Apps konnten nicht aktualisiert werden." "The system packages are up to date, but the Flatpak apps could not be updated.")"
+else
+	why="$(t "Die Aktualisierung ist an einer unerwarteten Stelle stehen geblieben." "The update stopped at an unexpected point.")"
+fi
+err "$(t "<b>Das Aktualisieren hat nicht geklappt.</b>" "<b>The update did not work.</b>")\n\n$why\n\n<small>$(t "Letzte Meldungen:" "Last messages:")\n$last</small>"

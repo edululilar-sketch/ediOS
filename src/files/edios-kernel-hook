@@ -1,0 +1,29 @@
+#!/bin/sh
+# GPL-3.0-or-later
+# apk commit hook (ediOS Secure Boot): /boot/vmlinuz-lts muss der mit dem ediOS-Schluessel
+# signierte Kernel sein, sonst startet ediOS mit Secure Boot nicht.
+# linux-lts ist in /etc/apk/world auf die signierte Version festgehalten. Ersetzt apk den Kernel
+# trotzdem durch dieselbe Version (z. B. "apk fix"), wird die signierte Datei wiederhergestellt.
+[ "${1:-}" = post-commit ] || exit 0
+if [ -r /usr/share/edios/i18n.sh ]; then . /usr/share/edios/i18n.sh; else t() { printf '%s' "$1"; }; fi
+SB=/usr/share/edios/secureboot
+K=/boot/vmlinuz-lts
+[ -f "$SB/vmlinuz-lts" ] && [ -f "$K" ] || exit 0
+# grub.cfg in der EFI-Partition an die (evtl. neu erzeugte) /boot/grub/grub.cfg anpassen
+if [ -f /boot/efi/EFI/edios/grubx64.efi ]; then
+	/usr/libexec/edios-grub-stub / || echo "ediOS: $(t "Hinweis: grub.cfg in der EFI-Partition nicht erneuert." "note: grub.cfg in the EFI partition was not renewed.")" >&2
+fi
+h="$(sha256sum < "$K" | cut -d' ' -f1)"
+[ "$h" = "$(cat "$SB/vmlinuz-lts.signed.sha256")" ] && exit 0
+if [ "$h" = "$(cat "$SB/vmlinuz-lts.unsigned.sha256")" ]; then
+	cp "$SB/vmlinuz-lts" "$K" && echo "ediOS: $(t "signierter Kernel wiederhergestellt (Secure Boot)." "signed kernel restored (Secure Boot).")"
+	exit 0
+fi
+t "ediOS: ACHTUNG - /boot/vmlinuz-lts ist ein neuer, NICHT signierter Kernel.
+       Mit Secure Boot startet ediOS damit nicht. Entweder Secure Boot im UEFI-Setup
+       ausschalten oder den signierten Kernel zurueckholen:" "ediOS: WARNING - /boot/vmlinuz-lts is a new kernel that is NOT signed.
+       ediOS will not start with it while Secure Boot is on. Either turn Secure Boot off
+       in the UEFI setup or bring back the signed kernel:" >&2
+echo "
+       sudo apk add linux-lts=$(cat "$SB/kernel-version")" >&2
+exit 0

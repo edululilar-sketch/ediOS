@@ -1,0 +1,21 @@
+#!/bin/sh
+# Startet den PipeWire-Audiostack fuer den Desktop-Benutzer (jeden Dienst nur einmal).
+# Reihenfolge wichtig: wireplumber und pipewire-pulse erst, wenn pipewire bereit ist,
+# sonst beendet sich wireplumber sofort (dann gibt es keinen Ton).
+RUN="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+start_once() {
+	command -v "$1" >/dev/null 2>&1 || return 0
+	pgrep -u "$(id -u)" -x "$1" >/dev/null 2>&1 || "$1" >/dev/null 2>&1 &
+}
+
+start_once pipewire
+i=0
+while [ ! -S "$RUN/pipewire-0" ] && [ "$i" -lt 50 ]; do sleep 0.2; i=$((i + 1)); done
+sleep 0.5
+start_once wireplumber
+start_once pipewire-pulse
+
+# Sicherheitsnetz: falls wireplumber trotzdem gleich wieder endet, einmal neu starten
+sleep 5
+start_once wireplumber

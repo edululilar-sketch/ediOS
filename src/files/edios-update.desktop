@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Update ediOS
+Name[de]=ediOS aktualisieren
+Comment=Bring the system and your apps up to date
+Comment[de]=System und Apps auf den neuesten Stand bringen
+Exec=/usr/bin/edios-update
+Icon=edios-update
+Terminal=false
+Categories=System;Settings;
+Keywords=Update;Updates;Upgrade;apk;Flatpak;
+Keywords[de]=Update;Updates;Aktualisierung;Upgrade;apk;Flatpak;

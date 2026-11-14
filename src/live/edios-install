@@ -1,0 +1,179 @@
+#!/bin/sh
+# ediOS installieren / Install ediOS (Assistent, zenity). GPL-3.0-or-later
+# Die eigentliche Arbeit macht /usr/libexec/edios-install-root (per doas, nur im Live-System).
+. /usr/share/edios/i18n.sh
+TITLE="$(t "ediOS installieren" "Install ediOS")"
+RUN="${XDG_RUNTIME_DIR:-/tmp}"
+LOG="$RUN/edios-install.log"
+RC="$LOG.rc"
+ROOTPART=/usr/libexec/edios-install-root
+CONFIRM_WORD="$(t JA YES)"
+
+z() { zenity "$@" 2>/dev/null; }
+err() { z --error --title "$TITLE" --width 580 --text "$1"; exit 1; }
+esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+root() { doas -n env EDIOS_LANG="$EDIOS_L" "$ROOTPART" "$@"; }
+
+[ -e /etc/conf.d/liveuser ] || err "$(t "Der Installer funktioniert nur im ediOS-Live-System (vom USB-Stick gestartet)." "The installer only works in the ediOS live system (started from the USB stick).")"
+exec 9>"$RUN/edios-install.lock"
+flock -n 9 || { z --info --title "$TITLE" --width 400 --text "$(t "Der Installer läuft bereits." "The installer is already running.")"; exit 0; }
+doas -n true 2>/dev/null || err "$(t "Der Installer braucht Administratorrechte (doas). Im Live-System sollte das ohne Passwort gehen." "The installer needs administrator rights (doas). In the live system this should work without a password.")"
+[ -d /sys/firmware/efi ] || err "$(t "Dieser PC wurde im <b>BIOS-/Legacy-Modus</b> gestartet.\n\nDer ediOS-Installer braucht <b>UEFI</b>. Bitte im Boot-Menü (F12/F11/Esc) den Eintrag mit „UEFI“ für den USB-Stick wählen." \
+	"This PC was started in <b>BIOS/legacy mode</b>.\n\nThe ediOS installer needs <b>UEFI</b>. Please choose the entry with “UEFI” for the USB stick in the boot menu (F12/F11/Esc).")"
+
+z --question --title "$TITLE" --width 580 --ok-label "$(t "Weiter" "Continue")" --cancel-label "$(t "Abbrechen" "Cancel")" \
+	--text "$(t "<b>ediOS installieren</b>\n\nediOS wird auf eine <b>ganze Platte</b> installiert (z. B. eine externe USB-SSD). Dabei wird <b>alles auf dieser Platte gelöscht</b>.\n\nAndere Platten, auch eine Windows-Platte, werden nicht verändert. Bei einer externen Platte bleibt das Startmenü des PCs unverändert: ediOS startest du dann über das Boot-Menü (F12/F11/Esc).\n\nSprache, Tastatur, Zeitzone und deine Auswahl aus der Einrichtung werden ins installierte ediOS übernommen." \
+	"<b>Install ediOS</b>\n\nediOS is installed on a <b>whole disk</b> (for example an external USB SSD). <b>Everything on that disk will be deleted</b>.\n\nOther disks, including a Windows disk, are not changed. With an external disk the PC's boot order stays the same: you start ediOS from the boot menu (F12/F11/Esc).\n\nLanguage, keyboard, time zone and your choices from the setup are copied to the installed ediOS.")" || exit 0
+
+# Inhalt einer Platte lesbar machen: "os:Windows;part:ntfs:Daten:400G" -> "Windows, Daten (ntfs, 400G)"
+inhalt_text() {
+	printf '%s\n' "$1" | tr ';' '\n' | while IFS=: read -r typ a b c; do
+		case "$typ" in
+			os) printf '%s\n' "$a" ;;
+			leer) t "leer (keine Partitionen)" "empty (no partitions)"; echo ;;
+			part)
+				case "$a" in
+					efi) printf '%s\n' "$(t "EFI-Partition" "EFI partition") ($c)" ;;
+					'?') printf '%s\n' "$(t "unbekannte Partition" "unknown partition") ($c)" ;;
+					*) if [ -n "$b" ]; then printf '%s\n' "„$b“ ($a, $c)"; else printf '%s\n' "$a, $c"; fi ;;
+				esac ;;
+		esac
+	done | awk 'NR > 1 {printf ", "} {printf "%s", $0}'
+}
+anschluss_text() {
+	case "$1" in usb) echo USB ;; extern) t "extern" "external"; echo ;; *) t "intern (im PC eingebaut)" "internal (built into the PC)"; echo ;; esac
+}
+
+# --- Platten suchen (kann ein paar Sekunden dauern: Inhalte werden nur lesend angesehen) ---
+LIST="$RUN/edios-install.liste"
+( root --liste > "$LIST" 2>"$LIST.err"; echo $? > "$LIST.rc" ) &
+pid=$!
+( while kill -0 "$pid" 2>/dev/null; do echo "# $(t "Platten werden gesucht …" "Looking for disks …")"; sleep 0.5; done ) \
+	| z --progress --pulsate --no-cancel --auto-close --title "$TITLE" --width 420 --text "$(t "Platten werden gesucht …" "Looking for disks …")"
+wait "$pid"
+[ "$(cat "$LIST.rc" 2>/dev/null)" = 0 ] || err "$(t "Die Platten konnten nicht gelesen werden:" "The disks could not be read:")\n\n$(tail -n 3 "$LIST.err" | esc)"
+[ -s "$LIST" ] || err "$(t "Es wurde keine passende Platte gefunden.\n\nSchließe die Zielplatte an (mindestens 12 GB) und starte den Installer neu. Der ediOS-Stick selbst wird nie angeboten." \
+	"No suitable disk was found.\n\nConnect the target disk (at least 12 GB) and start the installer again. The ediOS stick itself is never offered.")"
+
+set --
+while IFS='|' read -r d model size art mnt inh; do
+	info="$(inhalt_text "$inh")"
+	[ "$mnt" = 1 ] && info="$info  [$(t "geöffnet" "mounted")]"
+	set -- "$@" FALSE "$d" "$size" "$model" "$(anschluss_text "$art")" "$info"
+done < "$LIST"
+DISK="$(z --list --radiolist --title "$TITLE" --width 900 --height 420 \
+	--text "$(t "Auf welche Platte soll ediOS? <b>Alles darauf wird gelöscht.</b>\nDer ediOS-Stick, von dem du gerade startest, wird hier nicht angezeigt." \
+	"Which disk should ediOS go on? <b>Everything on it will be deleted.</b>\nThe ediOS stick you are running from is not shown here.")" \
+	--column "" --column "$(t "Laufwerk" "Drive")" --column "$(t "Größe" "Size")" --column "$(t "Modell" "Model")" \
+	--column "$(t "Anschluss" "Connection")" --column "$(t "Inhalt" "Contents")" "$@")" || exit 0
+[ -n "$DISK" ] || err "$(t "Keine Platte gewählt." "No disk selected.")"
+line="$(grep "^$DISK|" "$LIST" | head -n 1)"
+IFS='|' read -r d model size art mnt inh <<EOF
+$line
+EOF
+
+# --- eingehaengte Platte: erst aushaengen ---
+if [ "$mnt" = 1 ]; then
+	z --question --title "$TITLE" --width 560 --ok-label "$(t "Aushängen und weiter" "Unmount and continue")" --cancel-label "$(t "Abbrechen" "Cancel")" \
+		--text "$(t "Die Platte <b>$DISK</b> ist gerade geöffnet (eingehängt), z. B. weil du sie in „Dateien“ angesehen hast.\n\nFür die Installation wird sie jetzt ausgehängt. Schließe vorher Programme, die Dateien von dieser Platte geöffnet haben." \
+		"The disk <b>$DISK</b> is currently open (mounted), for example because you looked at it in “Files”.\n\nIt will be unmounted now for the installation. Close programs that have files from this disk open first.")" || exit 0
+	# zuerst als Benutzer ueber GVfs: "Dateien" schliesst dann seine Fenster auf dieser Platte selbst
+	lsblk -lnpo MOUNTPOINT "$DISK" | grep -v '^$' | while read -r mp; do
+		gio mount -u "$(printf '%b' "$mp")" >/dev/null 2>&1
+	done
+	sleep 1
+	out="$(root --aushaengen "$DISK" 2>&1)" || err "$(t "<b>Die Platte konnte nicht ausgehängt werden.</b>" "<b>The disk could not be unmounted.</b>")\n\n$(echo "$out" | tail -n 3 | esc)"
+fi
+
+# --- Benutzer ---
+US="$(printf '\037')"
+while :; do
+	f="$(z --forms --title "$TITLE" --width 540 --separator "$US" \
+		--text "$(t "Dein Benutzerkonto auf dem installierten ediOS" "Your user account on the installed ediOS")" \
+		--add-entry "$(t "Dein Name" "Your name")" --add-entry "$(t "Benutzername (klein, ohne Leerzeichen)" "User name (lowercase, no spaces)")" \
+		--add-password "$(t "Passwort" "Password")" --add-password "$(t "Passwort wiederholen" "Repeat password")")" || exit 0
+	NAME="$(echo "$f" | cut -d"$US" -f1)"; U="$(echo "$f" | cut -d"$US" -f2)"
+	P1="$(echo "$f" | cut -d"$US" -f3)"; P2="$(echo "$f" | cut -d"$US" -f4)"
+	case "$U" in ''|[!a-z_]*|*[!a-z0-9_-]*) z --error --width 480 --text "$(t "Benutzername: nur Kleinbuchstaben, Ziffern, - und _ (am Anfang ein Buchstabe)." "User name: only lowercase letters, digits, - and _ (starting with a letter).")"; continue ;; esac
+	case "$U" in root|edios|daemon|nobody|gdm|admin) z --error --width 420 --text "$(t "Dieser Benutzername ist reserviert." "This user name is reserved.")"; continue ;; esac
+	case "$NAME" in *:*) z --error --width 420 --text "$(t "Der Name darf keinen Doppelpunkt enthalten." "The name must not contain a colon.")"; continue ;; esac
+	[ "${#P1}" -ge 4 ] || { z --error --width 420 --text "$(t "Das Passwort braucht mindestens 4 Zeichen." "The password needs at least 4 characters.")"; continue; }
+	[ "$P1" = "$P2" ] || { z --error --width 420 --text "$(t "Die Passwörter sind nicht gleich." "The passwords do not match.")"; continue; }
+	break
+done
+HASH="$(printf '%s\n' "$P1" | openssl passwd -6 -stdin)"; P1=""; P2=""; f=""
+
+# --- Bestaetigung ---
+info="$(root --pruefen "$DISK" 2>&1)" || err "$(echo "$info" | tail -n 3 | esc)"
+IFS='|' read -r d model size art mnt inh <<EOF
+$info
+EOF
+ans="$(z --entry --title "$TITLE" --width 640 --ok-label "$(t "Installieren" "Install")" --cancel-label "$(t "Abbrechen" "Cancel")" \
+	--text "$(t "LETZTE PRÜFUNG – bitte genau lesen:" "FINAL CHECK – please read carefully:")
+
+$(t "Laufwerk" "Drive"): $DISK
+$(t "Modell" "Model"): $model
+$(t "Größe" "Size"): $size
+$(t "Anschluss" "Connection"): $(anschluss_text "$art")
+$(t "Darauf gefunden" "Found on it"): $(inhalt_text "$inh")
+
+$(t "ALLE DATEN AUF DIESEM LAUFWERK WERDEN GELÖSCHT." "ALL DATA ON THIS DRIVE WILL BE DELETED.")
+$(t "Wenn das stimmt, tippe $CONFIRM_WORD (in Großbuchstaben) ein." "If this is correct, type $CONFIRM_WORD (in capital letters).")")" || exit 0   # --entry zeigt kein Markup
+[ "$ans" = "$CONFIRM_WORD" ] || err "$(t "Abgebrochen: Es wurde nicht „$CONFIRM_WORD“ eingetippt. Es wurde nichts verändert." "Cancelled: “$CONFIRM_WORD” was not typed. Nothing was changed.")"
+
+# --- Einstellungen aus dem Live-System fuer das installierte System sammeln (A2) ---
+UEB="$(mktemp -d /tmp/edios-uebernahme.XXXXXX)"
+chmod 755 "$UEB"; mkdir -p "$UEB/dconf"
+dconf dump / 2>/dev/null | awk '
+	/^\[/ { sec = substr($0, 2, length($0) - 2); keep = 0
+		if (sec ~ /^org\/gnome\/desktop\/(interface|wm\/preferences|input-sources|a11y|peripherals)(\/|$)/) keep = 1
+		if (sec ~ /^org\/gnome\/shell\/extensions\/dash-to-dock$/) keep = 1
+		if (keep) print; next }
+	keep { print }' > "$UEB/dconf/user.ini"
+[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/edios/einrichtung-erledigt" ] && : > "$UEB/einrichtung-erledigt"
+chmod -R a+rX "$UEB"
+
+# --- Installieren ---
+: > "$LOG"; rm -f "$RC"
+(
+	printf '%s\n' "$HASH" | root --installieren "$DISK" "$U" "$NAME" JA "$UEB" >>"$LOG" 2>&1
+	echo "$?" > "$RC"
+) &
+JOB=$!
+(
+	while kill -0 "$JOB" 2>/dev/null; do
+		n="$(sed -n 's/^@@SCHRITT \([0-9]\).*/\1/p' "$LOG" | tail -n 1)"
+		case "$n" in
+			1) pct=3; text="$(t "Platte wird vorbereitet" "Preparing the disk")" ;;
+			2)
+				text="$(t "ediOS wird installiert (das dauert einige Minuten)" "Installing ediOS (this takes a few minutes)")"
+				ij="$(grep -o '^([0-9]*/[0-9]*)' "$LOG" | tail -n 1 | tr -d '()')"
+				i="${ij%/*}"; j="${ij#*/}"
+				if [ -n "$ij" ] && [ "${j:-0}" -gt 0 ]; then pct=$(( 5 + 70 * i / j )); text="$text ($i $(t von of) $j)"; else pct=5; fi ;;
+			3) pct=80; text="$(t "Einstellungen werden übernommen" "Copying settings")" ;;
+			4) pct=88; text="$(t "Benutzer $U wird angelegt" "Creating user $U")" ;;
+			5) pct=93; text="$(t "Startdateien werden eingerichtet (Secure Boot)" "Setting up boot files (Secure Boot)")" ;;
+			6) pct=99; text="$(t "Fertig" "Done")" ;;
+			*) pct=1; text="$(t "Starte …" "Starting …")" ;;
+		esac
+		line="$(tr '\r' '\n' < "$LOG" | grep -v '^@@' | grep '[[:alnum:]]' | tail -n 1 | cut -c1-80 | esc)"
+		printf '%s\n# %s   –   %s\n' "$pct" "$text" "${line:-...}"
+		sleep 1
+	done
+	echo 100
+) | z --progress --no-cancel --auto-close --title "$TITLE" --width 660 --text "$(t "Starte …" "Starting …")"
+wait "$JOB"
+rc="$(cat "$RC" 2>/dev/null)"
+rm -rf "$UEB"
+if [ "$rc" = 0 ]; then
+	if [ "$art" = intern ]; then
+		next="$(t "Starte den PC neu und ziehe den USB-Stick ab. ediOS steht im Startmenü des PCs." "Restart the PC and remove the USB stick. ediOS is in the PC's boot menu.")"
+	else
+		next="$(t "Fahre den PC herunter und ziehe den USB-Stick ab (die Zielplatte bleibt dran). Wähle beim Start im Boot-Menü (F12/F11/Esc) die Platte <b>$model</b>.\nOhne Auswahl startet der PC wie bisher." \
+			"Shut down the PC and remove the USB stick (keep the target disk connected). At startup choose the disk <b>$model</b> in the boot menu (F12/F11/Esc).\nWithout a choice the PC starts as before.")"
+	fi
+	z --info --title "$TITLE" --width 580 --text "$(t "<b>ediOS ist installiert.</b>" "<b>ediOS is installed.</b>")\n\n$next\n\n$(t "Mit Secure Boot: beim ersten Start einmal den ediOS-Schlüssel eintragen (siehe Anleitung)." "With Secure Boot: enroll the ediOS key once at the first start (see the guide).")"
+	exit 0
+fi
+last="$(tr '\r' '\n' < "$LOG" | grep -v '^@@' | grep . | tail -n 8 | cut -c1-110 | esc)"
+err "$(t "<b>Die Installation hat nicht geklappt.</b>" "<b>The installation did not work.</b>")\n\n<small>$(t "Letzte Meldungen:" "Last messages:")\n$last\n\n$(t "Ganzes Protokoll:" "Full log:") $LOG</small>"

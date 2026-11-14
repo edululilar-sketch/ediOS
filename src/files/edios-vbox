@@ -1,0 +1,28 @@
+#!/sbin/openrc-run
+# ediOS (GPL-3.0-or-later):
+# startet die VirtualBox-Gastdienste nur in einer VirtualBox-VM. Auf echter Hardware passiert nichts.
+description="ediOS: VirtualBox-Gastdienste nur in VirtualBox starten"
+
+depend() {
+	need localmount
+	after udev
+}
+
+in_vbox() {
+	grep -qs -e VirtualBox -e innotek /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor
+}
+
+start() {
+	in_vbox || return 0
+	ebegin "VirtualBox erkannt, starte Gastdienste"
+	rc-service -q virtualbox-guest-additions start 2>/dev/null
+	rc-service -q virtualbox-drm-client start 2>/dev/null
+	eend 0
+}
+
+stop() {
+	in_vbox || return 0
+	rc-service -q virtualbox-drm-client stop 2>/dev/null
+	rc-service -q virtualbox-guest-additions stop 2>/dev/null
+	return 0
+}

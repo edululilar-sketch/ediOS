@@ -1,0 +1,3 @@
+# ediOS: Sprache fuer GDM (Anmeldebildschirm) und Standardsprache neuer Sitzungen.
+# Wird von /etc/init.d/gdm eingelesen und von edios-sprache-root geschrieben.
+export LANG="de_DE.UTF-8"

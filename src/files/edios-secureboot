@@ -1,0 +1,124 @@
+#!/bin/sh
+# ediOS Secure Boot: zeigt den Zustand und traegt den ediOS-Schluessel ein (MOK). GPL-3.0-or-later
+#   edios-secureboot            Fenster mit Zustand und Anleitung
+#   edios-secureboot --hinweis  (Autostart, nur installiertes System) melden, wenn der Schluessel noch fehlt
+. /usr/share/edios/i18n.sh
+TITLE="Secure Boot"
+DER=/usr/share/edios/secureboot/edios-mok.der
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/edios"
+MUTE="$CONF/secureboot-hinweis-aus"
+
+z() { zenity "$@" 2>/dev/null; }
+
+ANLEITUNG="$(t "<b>So geht es weiter (einmalig):</b>
+
+1. Rechner <b>neu starten</b>.
+2. Es erscheint ein <b>blauer Bildschirm</b> \"Shim UEFI key management\".
+   Innerhalb von 10 Sekunden <b>eine Taste drücken</b>.
+3. <b>Enroll MOK</b> wählen, dann <b>Continue</b>, dann <b>Yes</b>.
+4. Das <b>Einmal-Passwort</b> von eben eingeben (die Buchstaben erscheinen nicht).
+5. <b>Reboot</b> wählen.
+6. Erst danach im UEFI-Setup (meist F2 oder Entf beim Start) <b>Secure Boot einschalten</b>.
+
+Achtung: Im blauen Bildschirm gilt die <b>englische Tastatur</b> (y und z sind vertauscht).
+Verpasst? Einfach hier noch einmal eintragen." "<b>How to continue (one time only):</b>
+
+1. <b>Restart</b> the computer.
+2. A <b>blue screen</b> \"Shim UEFI key management\" appears.
+   <b>Press a key</b> within 10 seconds.
+3. Choose <b>Enroll MOK</b>, then <b>Continue</b>, then <b>Yes</b>.
+4. Type the <b>one-time password</b> you just chose (the letters are not shown).
+5. Choose <b>Reboot</b>.
+6. Only then <b>turn on Secure Boot</b> in the UEFI setup (usually F2 or Del at startup).
+
+Note: the blue screen uses the <b>US keyboard layout</b>.
+Missed it? Simply enroll the key here again.")"
+
+# --- Zustand ermitteln ---
+state() {
+	[ -d /sys/firmware/efi ] || { echo bios; return; }
+	sb="$(mokutil --sb-state 2>/dev/null)"
+	key="$(mokutil --test-key "$DER" 2>&1)"
+	case "$key" in
+		*"already in the enrollment request"*) echo vorgemerkt; return ;;
+	esac
+	case "$sb" in
+		*"SecureBoot enabled"*) echo an; return ;;
+	esac
+	case "$key" in
+		*"is already enrolled"*) echo eingetragen ;;
+		*"is not enrolled"*) echo fehlt ;;
+		*) echo unbekannt ;;
+	esac
+}
+
+if [ "${1:-}" = "--hinweis" ]; then
+	# Im Live-System nicht: dort zeigt die Einrichtung den Weg, und die Datei LIESMICH/README erklaert ihn
+	[ -e /etc/conf.d/liveuser ] && exit 0
+	[ -e "$MUTE" ] && exit 0
+	[ -f "$DER" ] || exit 0
+	ST="$(state)"
+	[ "$ST" = fehlt ] || exit 0
+	ans="$(z --question --title "$TITLE" --width 540 --ok-label "$(t "Schlüssel eintragen" "Enroll key")" --cancel-label "$(t "Später" "Later")" \
+		--extra-button "$(t "Nicht mehr anzeigen" "Don't show again")" \
+		--text "$(t "<b>ediOS läuft gerade ohne Secure Boot.</b>\n\nDas ist in Ordnung. Wenn du Secure Boot im BIOS/UEFI wieder <b>einschalten</b> möchtest (z. B. für Windows 11 oder Spiele mit Anti-Cheat), muss vorher einmal der <b>ediOS-Schlüssel</b> eingetragen werden. Sonst startet ediOS mit Secure Boot nicht.\n\nDas dauert etwa eine Minute und einen Neustart." \
+		"<b>ediOS is running without Secure Boot.</b>\n\nThat is fine. If you want to turn Secure Boot <b>on</b> again in the BIOS/UEFI (e.g. for Windows 11 or games with anti-cheat), the <b>ediOS key</b> has to be enrolled once first. Otherwise ediOS will not start with Secure Boot.\n\nThis takes about one minute and one restart.")")"
+	rc=$?
+	if [ "$ans" = "$(t "Nicht mehr anzeigen" "Don't show again")" ]; then mkdir -p "$CONF" && : > "$MUTE"; exit 0; fi
+	[ "$rc" = 0 ] || exit 0
+	START_IMPORT=1
+else
+	ST="$(state)"
+fi
+
+case "$ST" in
+bios)
+	z --info --title "$TITLE" --width 480 --text "$(t "Dieser Rechner startet ediOS im <b>BIOS-/Legacy-Modus</b>.\n\nSecure Boot gibt es nur beim Start per UEFI. Hier ist nichts zu tun." \
+		"This computer starts ediOS in <b>BIOS/legacy mode</b>.\n\nSecure Boot only exists when starting via UEFI. Nothing to do here.")"
+	exit 0 ;;
+an)
+	z --info --title "$TITLE" --width 480 --text "$(t "<b>Secure Boot ist an</b> und ediOS läuft damit. Alles in Ordnung.\n\nDer ediOS-Schlüssel ist eingetragen." \
+		"<b>Secure Boot is on</b> and ediOS is running with it. Everything is fine.\n\nThe ediOS key is enrolled.")"
+	exit 0 ;;
+eingetragen)
+	z --info --title "$TITLE" --width 500 --text "$(t "<b>Der ediOS-Schlüssel ist eingetragen.</b>\n\nSecure Boot ist im Moment aus. Du kannst es jetzt im UEFI-Setup (meist F2 oder Entf beim Start) wieder einschalten, ediOS startet dann trotzdem." \
+		"<b>The ediOS key is enrolled.</b>\n\nSecure Boot is currently off. You can now turn it on in the UEFI setup (usually F2 or Del at startup); ediOS will still start.")"
+	exit 0 ;;
+vorgemerkt)
+	if z --question --title "$TITLE" --width 600 --ok-label "$(t "Verstanden" "OK")" --cancel-label "$(t "Vormerkung löschen" "Cancel enrollment")" \
+		--text "$(t "Der ediOS-Schlüssel ist <b>vorgemerkt</b>." "The ediOS key is <b>queued for enrollment</b>.")\n\n$ANLEITUNG"; then exit 0; fi
+	if doas -n true 2>/dev/null; then doas -n /usr/libexec/edios-secureboot-root revoke; else pkexec /usr/libexec/edios-secureboot-root revoke; fi >/dev/null 2>&1
+	exit 0 ;;
+unbekannt)
+	z --warning --title "$TITLE" --width 500 --text "$(t "Der Secure-Boot-Zustand konnte nicht gelesen werden (mokutil).\n\nTipp: Secure Boot im UEFI-Setup ausgeschaltet lassen, dann startet ediOS immer." \
+		"The Secure Boot state could not be read (mokutil).\n\nTip: leave Secure Boot off in the UEFI setup, then ediOS always starts.")"
+	exit 1 ;;
+esac
+
+# --- Schluessel fehlt: eintragen ---
+if [ -z "${START_IMPORT:-}" ]; then
+	z --question --title "$TITLE" --width 540 --ok-label "$(t "Schlüssel eintragen" "Enroll key")" --cancel-label "$(t "Abbrechen" "Cancel")" \
+		--text "$(t "<b>Secure Boot ist aus</b> und der ediOS-Schlüssel ist <b>noch nicht eingetragen</b>.\n\nWenn du Secure Boot einschalten möchtest, trage zuerst den Schlüssel ein. Dafür vergibst du gleich ein <b>Einmal-Passwort</b>, das du nach dem Neustart im blauen MOK-Manager noch einmal eingibst." \
+		"<b>Secure Boot is off</b> and the ediOS key is <b>not enrolled yet</b>.\n\nIf you want to turn Secure Boot on, enroll the key first. You will choose a <b>one-time password</b> that you type again in the blue MOK manager after the restart.")" || exit 0
+fi
+while :; do
+	pw="$(z --forms --title "$TITLE" --width 520 --separator "$(printf '\037')" \
+		--text "$(t "Einmal-Passwort wählen (nur für den nächsten Neustart).\n\nNur <b>Kleinbuchstaben a-x und Ziffern</b>, 4 bis 16 Zeichen.\n(Im blauen Bildschirm gilt die englische Tastatur.)" \
+		"Choose a one-time password (only for the next restart).\n\nOnly <b>lowercase letters a-x and digits</b>, 4 to 16 characters.\n(The blue screen uses the US keyboard layout.)")" \
+		--add-password "$(t "Einmal-Passwort" "One-time password")" --add-password "$(t "Wiederholen" "Repeat")")" || exit 0
+	p1="${pw%%$(printf '\037')*}"; p2="${pw#*$(printf '\037')}"
+	case "$p1" in *[!a-x0-9]*|'') z --error --width 420 --text "$(t "Bitte nur Kleinbuchstaben a-x und Ziffern verwenden." "Please only use lowercase letters a-x and digits.")"; continue ;; esac
+	[ "${#p1}" -ge 4 ] && [ "${#p1}" -le 16 ] || { z --error --width 420 --text "$(t "Das Passwort braucht 4 bis 16 Zeichen." "The password needs 4 to 16 characters.")"; continue; }
+	[ "$p1" = "$p2" ] || { z --error --width 420 --text "$(t "Die Passwörter sind nicht gleich." "The passwords do not match.")"; continue; }
+	break
+done
+HASH="$(printf '%s\n' "$p1" | openssl passwd -6 -stdin)"
+p1=""; p2=""; pw=""
+if doas -n true 2>/dev/null; then ROOT="doas -n"; else ROOT="pkexec"; fi
+# shellcheck disable=SC2086
+if OUT="$(printf '%s\n' "$HASH" | $ROOT /usr/libexec/edios-secureboot-root import 2>&1)"; then
+	z --info --title "$TITLE" --width 600 --text "$(t "Der ediOS-Schlüssel ist <b>vorgemerkt</b>." "The ediOS key is <b>queued for enrollment</b>.")\n\n$ANLEITUNG"
+else
+	z --error --title "$TITLE" --width 560 --text "$(t "Das hat nicht geklappt:" "That did not work:")\n\n$(echo "$OUT" | tail -n 4 | tr -d '<>&')\n\n$(t "Alternative: Secure Boot im UEFI-Setup ausgeschaltet lassen." "Alternative: leave Secure Boot off in the UEFI setup.")"
+	exit 1
+fi

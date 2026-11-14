@@ -1,0 +1,8 @@
+# ediOS: Hardware-Uhr (RTC) in UTC.
+# Der Kernel stellt die Systemzeit beim Start selbst aus der RTC (rtc_cmos), chrony haelt danach die Zeit aktuell
+# und schreibt sie per "rtcsync" zurueck in die RTC. hwclock muss deshalb nicht lesen/schreiben; auf PCs und VMs
+# ohne Uhr-Takt-Interrupt wartete es sonst bei jedem Start 10 s ("Waiting for clock tick").
+clock="UTC"
+clock_hctosys="NO"
+clock_systohc="NO"
+clock_args=""

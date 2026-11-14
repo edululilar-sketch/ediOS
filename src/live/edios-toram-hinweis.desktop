@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ediOS RAM hint
+Name[de]=ediOS RAM-Hinweis
+Exec=/usr/libexec/edios-toram-hinweis
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=5

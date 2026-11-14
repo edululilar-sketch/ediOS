@@ -1,0 +1,5 @@
+# ediOS-Paketquelle / ediOS package source.
+# apk liest diese Datei zusaetzlich zu /etc/apk/repositories (apk reads this in addition to /etc/apk/repositories).
+# Die Pakete sind mit dem ediOS-Schluessel signiert (/etc/apk/keys/edios-repo.rsa.pub, Paket edios-keyring);
+# andere Signaturen lehnt apk ab. / Packages are signed with the ediOS key; apk rejects anything else.
+https://edululilar-sketch.github.io/edios-repo/v3.24/edios

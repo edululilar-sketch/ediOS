@@ -1,0 +1,44 @@
+#!/bin/sh
+# ediOS aktualisieren, root-Teil (gestartet per pkexec oder doas von /usr/bin/edios-update). GPL-3.0-or-later
+# Aktualisiert ALLE Systempakete (Alpine und ediOS, apk) und die systemweiten Flatpak-Apps.
+# Ausgabe fuer das Fenster:  "@@SCHRITT n"  (1 Paketlisten, 2 Systempakete, 3 Flatpak System)
+#                            "@@HINWEIS code" (edios-weg = ediOS-Quelle nicht erreichbar, schluessel = Schluessel fehlt)
+# ediOS-Paketquelle: /etc/apk/repositories.d/edios.list (apk liest sie zusaetzlich zu /etc/apk/repositories).
+# Ist NUR diese Quelle nicht erreichbar, laufen die Alpine-Updates trotzdem (--force-missing-repositories).
+# Rueckgabe: 0 ok, 10 Paketlisten nicht ladbar, 11 apk upgrade fehlgeschlagen, 12 Flatpak (System) fehlgeschlagen
+set -u
+[ "$(id -u)" = 0 ] || { echo "Muss als root laufen / must run as root" >&2; exit 1; }
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+EDIOS_LIST=/etc/apk/repositories.d/edios.list
+EDIOS_KEY=/etc/apk/keys/edios-repo.rsa.pub
+
+echo "@@SCHRITT 1"
+erepo="$(grep -v '^[[:space:]]*#' "$EDIOS_LIST" 2>/dev/null | grep -E '^[[:space:]]*(https?://|/)' | head -n 1)"
+if [ -n "$erepo" ]; then
+	echo "ediOS: $erepo"
+	[ -f "$EDIOS_KEY" ] || echo "@@HINWEIS schluessel"
+else
+	echo "ediOS: -"
+fi
+FORCE=""
+if ! apk update; then
+	[ -n "$erepo" ] || exit 10
+	# Liegt es nur an der ediOS-Quelle? Alpine-Quellen allein pruefen.
+	if apk update --repositories-file /etc/apk/repositories; then
+		echo "@@HINWEIS edios-weg"
+		FORCE="--force-missing-repositories"
+	else
+		exit 10
+	fi
+fi
+
+echo "@@SCHRITT 2"
+# shellcheck disable=SC2086
+apk upgrade $FORCE || exit 11
+
+if command -v flatpak >/dev/null 2>&1 && [ -n "$(flatpak remotes --system 2>/dev/null)" ]; then
+	echo "@@SCHRITT 3"
+	flatpak update --system -y --noninteractive || exit 12
+fi
+echo "@@FERTIG"
+exit 0

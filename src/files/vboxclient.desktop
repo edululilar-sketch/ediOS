@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=vboxclient
+Comment=VirtualBox User Session Services (nur in VirtualBox)
+Exec=/usr/libexec/edios-vboxclient
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
