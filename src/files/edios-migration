@@ -1,0 +1,35 @@
+#!/sbin/openrc-run
+# ediOS: einmalige Umstellungen nach einem Versions-Update (GPL-3.0-or-later). Laeuft beim Start, nach dem
+# Anmeldebildschirm, und tut nichts mehr, sobald der Merker da ist.
+#   1.1: GNOME Software entfernen. Sein apk-Teil (apk-polkit-server) laeuft auf ediOS nicht ("Meldung zu
+#        apk-polkit-server") und koennte Systemprogramme deinstallieren. Ersatz: "ediOS Apps" (Flathub) und
+#        "ediOS aktualisieren". Flatpak-Apps und ihre Daten bleiben erhalten.
+description="ediOS: einmalige Umstellungen nach einem Update"
+STAMP_DIR=/var/lib/edios
+
+depend() {
+	after gdm networkmanager
+}
+
+start() {
+	[ -e "$STAMP_DIR/migration-1.1" ] && return 0
+	# Live-System (RAM) und laufende apk-Vorgaenge nicht anfassen
+	[ -e /etc/conf.d/liveuser ] && return 0
+	ebegin "ediOS: Umstellung auf 1.1"
+	alt=""
+	for p in gnome-software-plugin-apk2 gnome-software-plugin-flatpak gnome-software-lang gnome-software; do
+		grep -qx "$p" /etc/apk/world 2>/dev/null && alt="$alt $p"
+	done
+	rc=0
+	if [ -n "$alt" ]; then
+		# shellcheck disable=SC2086
+		apk del --no-network --quiet $alt >/var/log/edios-migration.log 2>&1 || rc=$?
+	fi
+	if [ "$rc" = 0 ]; then
+		mkdir -p "$STAMP_DIR"
+		echo "ediOS 1.1: Umstellung erledigt ($(date -Iseconds 2>/dev/null || date)), entfernt:${alt:- nichts}" \
+			> "$STAMP_DIR/migration-1.1"
+	fi
+	# Ein Fehler hier darf den Start nie aufhalten: beim naechsten Start erneut versuchen
+	eend 0
+}

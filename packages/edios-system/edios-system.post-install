@@ -1,0 +1,15 @@
+#!/bin/sh
+# Dienste fuer den naechsten Start eintragen (Schutz vor vollem RAM, Zeitzone/Uhr, einmalige Umstellung)
+for s in earlyoom openrc-settingsd edios-migration; do
+	[ ! -e "/etc/init.d/$s" ] || [ -e "/etc/runlevels/default/$s" ] || rc-update add "$s" default >/dev/null 2>&1 || true
+done
+# Version in /etc/os-release (fastfetch, Info-Seite) - nur auf ediOS, nie auf einem fremden Alpine
+if grep -q '^ID=edios$' /etc/os-release 2>/dev/null && ! cmp -s /usr/share/edios/os-release /etc/os-release; then
+	cp /usr/share/edios/os-release /etc/.os-release.edios && chmod 644 /etc/.os-release.edios \
+		&& mv -f /etc/.os-release.edios /etc/os-release
+fi
+# zenity-Dialoge mit ediOS-Symbol (abuild verbietet /usr/local im Paket, darum hier kopieren)
+src=/usr/share/edios/zenity/org.gnome.Zenity.desktop
+dst=/usr/local/share/applications/org.gnome.Zenity.desktop
+mkdir -p "${dst%/*}" && { cmp -s "$src" "$dst" 2>/dev/null || cp "$src" "$dst"; }
+exit 0

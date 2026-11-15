@@ -1,7 +1,7 @@
 # ediOS: Anmelde- und Sperrbildschirm (GDM). Baut das Theme nach jedem gnome-shell-Update neu ein.
 # Quellen kommen aus src/ des Projekts (build-repo.sh kopiert sie nach $startdir/edios-src).
 pkgname=edios-gdm-theme
-pkgver=1.0.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
+pkgver=1.1.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
 pkgrel=0
 pkgdesc="ediOS login and lock screen (rebuilt after gnome-shell updates)"
 url="https://github.com/edululilar-sketch/ediOS"

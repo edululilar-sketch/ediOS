@@ -1,0 +1,7 @@
+Deutsche Uebersetzungen aus iso-codes 4.20.1 (https://salsa.debian.org/iso-codes-team/iso-codes, Tag v4.20.1),
+unveraendert. Lizenz: LGPL-2.1-or-later (siehe LGPL-2.1-or-later.txt, Autoren in den .po-Dateien).
+
+Warum: In Alpine 3.24 enthaelt iso-codes-lang 4.20.1-r0 nur Verweise (z. B. iso_639.mo -> iso_639-2.mo), die
+Zieldateien fehlen. Deshalb zeigte GNOME Sprach- und Laendernamen englisch ("German (Germany)").
+Das Paket edios-system uebersetzt diese Dateien (msgfmt) und legt sie genau an die Verweisziele
+(/usr/share/locale/de/LC_MESSAGES/iso_639-2.mo usw.). Sobald Alpine das behebt, kann das wieder weg.

@@ -54,7 +54,9 @@ cat > "$HOME/.abuild/abuild.conf" <<EOF
 PACKAGER="ediOS <build@edios.local>"
 PACKAGER_PRIVKEY="/keys/$KEYNAME"
 REPODEST="$REPODEST"
+SRCDEST="$P/cache/distfiles"
 EOF
+mkdir -p "$P/cache/distfiles"
 doas cp "/keys/$KEYNAME.pub" "/etc/apk/keys/$KEYNAME.pub"
 doas chmod 644 "/etc/apk/keys/$KEYNAME.pub"
 doas apk update -q >/dev/null       # Paketindex fuer die Abhaengigkeiten (Image hat keinen Cache)
@@ -69,7 +71,7 @@ for p in $pkgs; do
 	rm -rf "${B:?}/$p"
 	mkdir -p "$B/$p/edios-src"
 	cp -a "$P/packages/$p/." "$B/$p/"
-	cp -a "$P/src/files" "$P/src/icons" "$P/src/pubkeys" "$P/src/files.map" "$P/src/install-map.sh" "$B/$p/edios-src/"
+	cp -a "$P/src/files" "$P/src/icons" "$P/src/pubkeys" "$P/src/iso-codes-de" "$P/src/files.map" "$P/src/install-map.sh" "$B/$p/edios-src/"
 	# inoffizieller Bau: den lokalen oeffentlichen Schluessel zusaetzlich mitliefern (nie den privaten)
 	[ "$KEYNAME" = edios-repo.rsa ] || cp "/keys/$KEYNAME.pub" "$B/$p/edios-src/pubkeys/$KEYNAME.pub"
 	find "$B/$p/edios-src" -name __pycache__ -type d -exec rm -rf {} +

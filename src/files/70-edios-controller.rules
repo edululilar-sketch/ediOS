@@ -1,0 +1,89 @@
+# ediOS: Spiele-Controller (Xbox, PlayStation, Nintendo Switch). GPL-3.0-or-later
+# Gibt dem angemeldeten Benutzer (uaccess) Zugriff auf die hidraw-Geraete dieser Controller - per USB und
+# Bluetooth. Steam, Browser (WebHID) und Emulatoren brauchen das fuer Gyro, Vibration, LEDs und Touchpad.
+# Nur genau diese Geraete-Kennungen (keine Tastaturen/Maeuse). Ergaenzt 60-steam-input.rules (steam-devices).
+# Die Treiber (xpad, hid-playstation, hid-nintendo, hid-microsoft) bringt der Kernel mit.
+
+# --- PlayStation ---
+# PS3 DualShock 3
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0268", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*054C:0268.*", MODE="0660", TAG+="uaccess"
+# PS4 DualShock 4
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="05c4", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*054C:05C4.*", MODE="0660", TAG+="uaccess"
+# PS4 DualShock 4 (2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="09cc", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*054C:09CC.*", MODE="0660", TAG+="uaccess"
+# PS4 Wireless Adapter
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0ba0", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*054C:0BA0.*", MODE="0660", TAG+="uaccess"
+# PS5 DualSense
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0ce6", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*054C:0CE6.*", MODE="0660", TAG+="uaccess"
+# PS5 DualSense Edge
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0df2", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*054C:0DF2.*", MODE="0660", TAG+="uaccess"
+
+# --- Nintendo Switch ---
+# Joy-Con (L)
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2006", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*057E:2006.*", MODE="0660", TAG+="uaccess"
+# Joy-Con (R)
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2007", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*057E:2007.*", MODE="0660", TAG+="uaccess"
+# Pro Controller
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*057E:2009.*", MODE="0660", TAG+="uaccess"
+# Joy-Con Ladegriff
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="200e", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*057E:200E.*", MODE="0660", TAG+="uaccess"
+# SNES Controller
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2017", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*057E:2017.*", MODE="0660", TAG+="uaccess"
+# N64 Controller
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2019", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*057E:2019.*", MODE="0660", TAG+="uaccess"
+# SEGA Genesis Controller
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="201e", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*057E:201E.*", MODE="0660", TAG+="uaccess"
+
+# --- Xbox ---
+# Xbox 360
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:028E.*", MODE="0660", TAG+="uaccess"
+# Xbox 360 (2)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028f", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:028F.*", MODE="0660", TAG+="uaccess"
+# Xbox One
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02d1", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:02D1.*", MODE="0660", TAG+="uaccess"
+# Xbox One (2015)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02dd", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:02DD.*", MODE="0660", TAG+="uaccess"
+# Xbox One S (Bluetooth)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02e0", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:02E0.*", MODE="0660", TAG+="uaccess"
+# Xbox One S
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02ea", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:02EA.*", MODE="0660", TAG+="uaccess"
+# Xbox One S (Bluetooth, neu)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="02fd", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:02FD.*", MODE="0660", TAG+="uaccess"
+# Xbox Elite 2
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b00", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:0B00.*", MODE="0660", TAG+="uaccess"
+# Xbox Elite 2 (Bluetooth)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b05", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:0B05.*", MODE="0660", TAG+="uaccess"
+# Xbox Series X|S
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b12", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:0B12.*", MODE="0660", TAG+="uaccess"
+# Xbox Series X|S (Bluetooth)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b13", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:0B13.*", MODE="0660", TAG+="uaccess"
+# Xbox Series X|S (Bluetooth, neu)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b20", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:0B20.*", MODE="0660", TAG+="uaccess"
+# Xbox Elite 2 (Bluetooth, neu)
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="0b22", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*045E:0B22.*", MODE="0660", TAG+="uaccess"

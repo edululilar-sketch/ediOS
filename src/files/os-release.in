@@ -1,0 +1,11 @@
+NAME="ediOS"
+PRETTY_NAME="ediOS @VERSION@"
+VERSION="@VERSION@"
+ID=edios
+ID_LIKE=alpine
+VERSION_ID="@VERSION@"
+HOME_URL="@URL@"
+DOCUMENTATION_URL="@URL@#readme"
+SUPPORT_URL="@URL@/issues"
+BUG_REPORT_URL="@URL@/issues"
+LOGO=edios-logo

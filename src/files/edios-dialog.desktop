@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ediOS
+Comment=ediOS dialogs (zenity)
+Comment[de]=ediOS-Dialoge (zenity)
+Exec=zenity
+Icon=edios-logo
+NoDisplay=true
+StartupWMClass=zenity

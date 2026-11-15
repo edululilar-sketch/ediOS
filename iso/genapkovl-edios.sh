@@ -46,19 +46,8 @@ done
 # --- Name und Version ---
 install -d "$R/etc/apk" "$R/etc/edios"
 echo "$HOSTNAME" > "$R/etc/hostname"
-cat > "$R/etc/os-release" <<EOF
-NAME="ediOS"
-PRETTY_NAME="ediOS $EDIOS_VERSION"
-VERSION="$EDIOS_VERSION"
-ID=edios
-ID_LIKE=alpine
-VERSION_ID="$EDIOS_VERSION"
-HOME_URL="$EDIOS_URL"
-DOCUMENTATION_URL="$EDIOS_URL#readme"
-SUPPORT_URL="$EDIOS_URL/issues"
-BUG_REPORT_URL="$EDIOS_URL/issues"
-LOGO=edios-logo
-EOF
+# gleiche Vorlage wie im Paket edios-system (das sie bei Updates neu schreibt)
+sed "s/@VERSION@/$EDIOS_VERSION/g; s|@URL@|$EDIOS_URL|g" "$P/src/files/os-release.in" > "$R/etc/os-release"
 printf 'Welcome to ediOS %s\nKernel \\r on an \\m (\\l)\n\n' "$EDIOS_VERSION" > "$R/etc/issue"
 printf 'ediOS %s (Alpine Linux)\n' "$EDIOS_VERSION" > "$R/etc/motd"
 
@@ -98,7 +87,7 @@ fi
 for s in devfs dmesg udev udev-trigger udev-settle modloop; do rc_add $s sysinit; done
 for s in bootmisc hostname hwclock loopback modules swap sysctl syslog zram-init nftables; do rc_add $s boot; done
 for s in dbus elogind networkmanager chronyd udev-postmount avahi-daemon bluetooth cupsd cgroups gdm \
-	edios-gdm-theme edios-vbox; do rc_add $s default; done
+	edios-gdm-theme edios-vbox earlyoom openrc-settingsd edios-migration; do rc_add $s default; done
 for s in mount-ro killprocs savecache; do rc_add $s shutdown; done
 [ ! -f "$R/etc/init.d/edios-live" ] || rc_add edios-live default
 [ ! -f "$R/etc/init.d/edios-toram" ] || rc_add edios-toram boot

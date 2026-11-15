@@ -1,5 +1,76 @@
 # Änderungen / Changelog
 
+## 1.1 (2026-11-14, noch nicht veröffentlicht / not yet released)
+
+### Deutsch
+
+**Neu**
+- **Medien:** spielt gängige Video- und Musikformate ab (H.264, H.265, AAC, MP3, Opus) – mit GStreamer-libav/-ugly;
+  neuer Musikplayer **Decibels**. Dateien zeigt Vorschaubilder für Videos und PDFs.
+- **Dateien:** Archive öffnen (zip, 7z, rar) und packen (zip, 7z); Windows-Platten (NTFS) und USB-Sticks (exFAT)
+  lesen und schreiben; Handys per USB (MTP) erscheinen in Dateien. PDFs öffnen standardmäßig im Dokumentenbetrachter.
+- **Schriften:** farbige Emojis; Ersatz für Microsoft-Schriften (Liberation für Arial/Times/Courier, Carlito für
+  Calibri, Caladea für Cambria).
+- **Tastenkürzel:** Super+E öffnet Dateien, Strg+Umschalt+Esc den Systemmonitor (Druck = Bildschirmfoto,
+  Super+L = Sperren wie gehabt). Der Ziffernblock ist nach der Anmeldung an.
+- **Wenig Speicherplatz:** Warnung, sobald auf einer Platte weniger als 10 % frei sind.
+- **Spiele:** Controller von Xbox, PlayStation und Nintendo Switch (USB und Bluetooth) sind für Steam & Co. nutzbar;
+  `vm.max_map_count` erhöht (viele Windows-Spiele unter Proton); **earlyoom** schützt vor einem Einfrieren, wenn der
+  Arbeitsspeicher voll läuft.
+- **Zeitzone und Uhr** lassen sich jetzt in den GNOME-Einstellungen ändern (openrc-settingsd).
+- **LibreOffice** ist nicht mehr fest eingebaut (ISO 198 MB kleiner), sondern im Apps-Helfer unter „Werkzeuge“ als
+  Flatpak. Auf schon installierten Systemen bleibt es, wie es ist.
+- Neues Paket **edios-system**: bringt diese Neuerungen auch per Update zu installierten 1.0-Systemen.
+
+**Verbessert / behoben**
+- Secure-Boot-Hinweis erscheint nur noch **einmal** (danach über die App „Secure Boot“) und im Live-System erst nach
+  dem Willkommen-Fenster.
+- **GNOME Software entfernt:** Es meldete Fehler zu `apk-polkit-server` und konnte Systemprogramme deinstallieren.
+  Apps gibt es über „ediOS Apps“, Updates über „ediOS aktualisieren“. Auf 1.0-Systemen entfernt ein einmaliger
+  Schritt beim ersten Start nach dem Update GNOME Software (Flatpak-Apps bleiben).
+- **Englische Reste übersetzt:** alle Sprachpakete installiert; Sprach- und Ländernamen in den Einstellungen deutsch
+  (Alpines iso-codes-lang enthält die Dateien nicht); Systemmonitor deutsch (Ursache: `LC_COLLATE=C`); ediOS-Dialoge
+  haben ein eigenes Symbol statt eines leeren.
+- fastfetch, „Info“ und `/etc/os-release` zeigen „ediOS 1.1“, auch nach dem Update.
+- Nach einem Sprachwechsel startet die Einrichtung den PC neu, statt abzumelden.
+
+**Bekannt**
+- „Abmelden“ im Systemmenü: Danach erscheint kein Passwortfeld; bitte neu starten (seit 1.0, Lösung geplant für 1.2).
+
+### English
+
+**New**
+- **Media:** plays common video and music formats (H.264, H.265, AAC, MP3, Opus) via GStreamer libav/ugly; new music
+  player **Decibels**. Files shows thumbnails for videos and PDFs.
+- **Files:** open archives (zip, 7z, rar) and create them (zip, 7z); read and write Windows drives (NTFS) and USB
+  sticks (exFAT); phones connected via USB (MTP) show up in Files. PDFs open in the document viewer by default.
+- **Fonts:** colour emoji; replacements for Microsoft fonts (Liberation for Arial/Times/Courier, Carlito for Calibri,
+  Caladea for Cambria).
+- **Shortcuts:** Super+E opens Files, Ctrl+Shift+Esc the System Monitor (Print = screenshot, Super+L = lock as
+  before). Num Lock is on after logging in.
+- **Low disk space:** warning as soon as less than 10 % is free on a drive.
+- **Games:** Xbox, PlayStation and Nintendo Switch controllers (USB and Bluetooth) work in Steam and others;
+  higher `vm.max_map_count` (many Windows games under Proton); **earlyoom** prevents freezes when memory runs full.
+- **Time zone and clock** can now be changed in GNOME Settings (openrc-settingsd).
+- **LibreOffice** is no longer built in (ISO 198 MB smaller); it is offered as a Flatpak in the apps helper under
+  "Tools". Already installed systems keep it.
+- New package **edios-system**: brings these changes to installed 1.0 systems via the update.
+
+**Improved / fixed**
+- The Secure Boot hint appears only **once** (afterwards via the "Secure Boot" app) and, in the live system, only
+  after the welcome window.
+- **GNOME Software removed:** it reported errors about `apk-polkit-server` and could uninstall system programs. Apps
+  come from "ediOS Apps", updates from "Update ediOS". On 1.0 systems a one-time step at the first start after the
+  update removes GNOME Software (Flatpak apps are kept).
+- **Remaining English/German mix-ups fixed:** all translation packages installed; language and country names in
+  Settings are translated (Alpine's iso-codes-lang lacks the files); System Monitor translated (cause:
+  `LC_COLLATE=C`); ediOS dialogs have their own icon instead of an empty one.
+- fastfetch, "About" and `/etc/os-release` show "ediOS 1.1", also after updating.
+- After changing the language, the setup restarts the PC instead of logging out.
+
+**Known issue**
+- "Log Out" in the system menu: no password field appears afterwards; please restart (since 1.0, fix planned for 1.2).
+
 ## 1.0 (2026-11-14)
 
 Erste öffentliche Version. / First public release.

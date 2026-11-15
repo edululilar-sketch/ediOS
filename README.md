@@ -16,10 +16,12 @@ einem Klick.
 | ![Einrichtung](docs/images/setup-sprache.png) | ![Installer](docs/images/installer-platten.png) |
 
 ## Was ist drin?
-- GNOME-Desktop mit Dock (links, unten oder rechts), Firefox, LibreOffice, Dateien, Terminal
+- GNOME-Desktop mit Dock (links, unten oder rechts), Firefox, Dateien, Terminal
+- Spielt gängige Video- und Musikformate ab, öffnet Archive (zip, 7z, rar) und packt zip/7z, liest und schreibt
+  Windows-Platten (NTFS) und USB-Sticks (exFAT), erkennt Handys (MTP)
 - **Einrichtung** beim ersten Start: Sprache (Deutsch/English), Tastatur, Zeitzone, Schrift (auch
   **OpenDyslexic** für Menschen mit Legasthenie) und Dock-Position
-- **ediOS Apps:** Steam, Discord, Spotify, GIMP und mehr mit einem Klick (Flathub)
+- **ediOS Apps:** Steam, Discord, Spotify, GIMP, LibreOffice und mehr mit einem Klick (Flathub)
 - **ediOS aktualisieren:** System, ediOS und Apps auf den neuesten Stand bringen
 - Secure Boot (über shim), Firewall ab Werk an, `sudo` funktioniert
 
@@ -76,10 +78,12 @@ starts as a live system from a USB stick and can be installed on a disk with a g
 | ![Setup](docs/images/setup-language-en.png) | ![Installer](docs/images/installer-disks-en.png) |
 
 ## What's inside?
-- GNOME desktop with a dock (left, bottom or right), Firefox, LibreOffice, Files, Terminal
+- GNOME desktop with a dock (left, bottom or right), Firefox, Files, Terminal
+- Plays common video and music formats, opens archives (zip, 7z, rar) and creates zip/7z, reads and writes
+  Windows drives (NTFS) and USB sticks (exFAT), detects phones (MTP)
 - **Setup** at the first start: language (English/German), keyboard, time zone, font (including
   **OpenDyslexic** for people with dyslexia) and dock position
-- **ediOS Apps:** Steam, Discord, Spotify, GIMP and more with one click (Flathub)
+- **ediOS Apps:** Steam, Discord, Spotify, GIMP, LibreOffice and more with one click (Flathub)
 - **Update ediOS:** bring the system, ediOS and your apps up to date
 - Secure Boot (via shim), firewall on by default, `sudo` works
 

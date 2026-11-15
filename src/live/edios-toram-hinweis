@@ -2,15 +2,27 @@
 # ediOS Live-System: nach dem Anmelden melden, ob "komplett in den RAM laden" geklappt hat. GPL-3.0-or-later
 . /usr/share/edios/i18n.sh
 st="$(cat /run/edios-toram/status 2>/dev/null)" || exit 0
+# Fenster (nicht die kurze Meldung) erst nach dem Willkommen-Fenster zeigen, nicht gleichzeitig
+warte_willkommen() {
+	i=0; war=0
+	while [ "$i" -lt 1800 ]; do
+		if pgrep -u "$(id -u)" -f "edios-einrichtung --willkommen" >/dev/null 2>&1; then war=1
+		elif [ "$war" = 1 ] || [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/edios/einrichtung-erledigt" ] || [ "$i" -ge 30 ]; then break
+		fi
+		sleep 2; i=$((i + 1))
+	done
+}
 case "$st" in
 ok)
 	notify-send -a ediOS -i media-removable "$(t "ediOS läuft komplett im Arbeitsspeicher" "ediOS is running entirely from memory")" \
 		"$(t "Du kannst den USB-Stick jetzt abziehen." "You can remove the USB stick now.")" ;;
 zu-wenig-ram*)
 	set -- $st
+	warte_willkommen
 	zenity --info --title ediOS --width 500 --text "$(t "<b>Zu wenig Arbeitsspeicher</b> für „komplett in den RAM laden“ ($2 MB vorhanden, etwa $3 MB nötig, also mindestens 8 GB).\n\nediOS läuft ganz normal vom USB-Stick weiter. Bitte ziehe den Stick <b>nicht</b> ab." \
 		"<b>Not enough memory</b> for “load completely into RAM” ($2 MB available, about $3 MB needed, so at least 8 GB).\n\nediOS keeps running normally from the USB stick. Please do <b>not</b> remove the stick.")" 2>/dev/null ;;
 fehler|kein-medium)
+	warte_willkommen
 	zenity --warning --title ediOS --width 480 --text "$(t "„Komplett in den RAM laden“ hat nicht geklappt. ediOS läuft vom USB-Stick weiter; bitte den Stick nicht abziehen." \
 		"“Load completely into RAM” did not work. ediOS keeps running from the USB stick; please do not remove it.")" 2>/dev/null ;;
 esac

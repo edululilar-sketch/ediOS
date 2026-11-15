@@ -130,8 +130,8 @@ if grep -qi 'No space left\|ENOSPC\|disk full' "$LOG"; then
 	why="$(t "Auf dem Laufwerk ist nicht mehr genug Platz frei. Lösche ein paar große Dateien (z. B. im Download-Ordner) und versuche es noch einmal." \
 		"There is not enough free space on the drive. Delete some large files (e.g. in the Downloads folder) and try again.")"
 elif grep -qi 'lock database\|database is locked\|Resource temporarily unavailable' "$LOG"; then
-	why="$(t "Gerade installiert ein anderes Programm Software (z. B. GNOME Software). Warte, bis es fertig ist, und versuche es dann noch einmal." \
-		"Another program is installing software right now (e.g. GNOME Software). Wait until it has finished and try again.")"
+	why="$(t "Gerade installiert ein anderes Programm Software (z. B. ein Terminal mit apk). Warte, bis es fertig ist, und versuche es dann noch einmal." \
+		"Another program is installing software right now (e.g. a terminal running apk). Wait until it has finished and try again.")"
 elif grep -qi 'UNTRUSTED\|BAD signature' "$LOG"; then
 	why="$(t "Ein Paket hatte eine ungültige Signatur und wurde zur Sicherheit nicht installiert. Versuche es später noch einmal." \
 		"A package had an invalid signature and was not installed for safety. Please try again later.")"

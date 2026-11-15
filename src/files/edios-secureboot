@@ -1,12 +1,14 @@
 #!/bin/sh
 # ediOS Secure Boot: zeigt den Zustand und traegt den ediOS-Schluessel ein (MOK). GPL-3.0-or-later
 #   edios-secureboot            Fenster mit Zustand und Anleitung
-#   edios-secureboot --hinweis  (Autostart, nur installiertes System) melden, wenn der Schluessel noch fehlt
+#   edios-secureboot --hinweis  (Autostart) EINMAL melden, wenn der Schluessel fehlt; danach nur noch ueber die App.
+#                               Wartet, bis das Willkommen-Fenster (edios-einrichtung --willkommen) zu ist.
 . /usr/share/edios/i18n.sh
 TITLE="Secure Boot"
 DER=/usr/share/edios/secureboot/edios-mok.der
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/edios"
-MUTE="$CONF/secureboot-hinweis-aus"
+MUTE="$CONF/secureboot-hinweis-aus"            # 1.0: "Nicht mehr anzeigen" gewaehlt
+SHOWN="$CONF/secureboot-hinweis-gezeigt"       # ab 1.1: Hinweis wurde einmal gezeigt
 
 z() { zenity "$@" 2>/dev/null; }
 
@@ -53,19 +55,27 @@ state() {
 }
 
 if [ "${1:-}" = "--hinweis" ]; then
-	# Im Live-System nicht: dort zeigt die Einrichtung den Weg, und die Datei LIESMICH/README erklaert ihn
-	[ -e /etc/conf.d/liveuser ] && exit 0
 	[ -e "$MUTE" ] && exit 0
+	[ -e "$SHOWN" ] && exit 0
 	[ -f "$DER" ] || exit 0
+	# Nicht gleichzeitig mit dem Willkommen-Fenster: Ist die Einrichtung noch nicht erledigt, bis zu 60 s warten, ob
+	# es auftaucht (beide starten per Autostart, die Reihenfolge ist nicht sicher), dann bis es geschlossen ist
+	# (hoechstens 1 Stunde).
+	i=0; war=0
+	while [ "$i" -lt 1800 ]; do
+		if pgrep -u "$(id -u)" -f "edios-einrichtung --willkommen" >/dev/null 2>&1; then war=1
+		elif [ "$war" = 1 ] || [ -e "$CONF/einrichtung-erledigt" ] || [ "$i" -ge 30 ]; then break
+		fi
+		sleep 2; i=$((i + 1))
+	done
+	[ "$war" = 0 ] || sleep 3
 	ST="$(state)"
 	[ "$ST" = fehlt ] || exit 0
-	ans="$(z --question --title "$TITLE" --width 540 --ok-label "$(t "Schlüssel eintragen" "Enroll key")" --cancel-label "$(t "Später" "Later")" \
-		--extra-button "$(t "Nicht mehr anzeigen" "Don't show again")" \
-		--text "$(t "<b>ediOS läuft gerade ohne Secure Boot.</b>\n\nDas ist in Ordnung. Wenn du Secure Boot im BIOS/UEFI wieder <b>einschalten</b> möchtest (z. B. für Windows 11 oder Spiele mit Anti-Cheat), muss vorher einmal der <b>ediOS-Schlüssel</b> eingetragen werden. Sonst startet ediOS mit Secure Boot nicht.\n\nDas dauert etwa eine Minute und einen Neustart." \
-		"<b>ediOS is running without Secure Boot.</b>\n\nThat is fine. If you want to turn Secure Boot <b>on</b> again in the BIOS/UEFI (e.g. for Windows 11 or games with anti-cheat), the <b>ediOS key</b> has to be enrolled once first. Otherwise ediOS will not start with Secure Boot.\n\nThis takes about one minute and one restart.")")"
-	rc=$?
-	if [ "$ans" = "$(t "Nicht mehr anzeigen" "Don't show again")" ]; then mkdir -p "$CONF" && : > "$MUTE"; exit 0; fi
-	[ "$rc" = 0 ] || exit 0
+	# Nur einmal von selbst; spaeter ueber die App "Secure Boot" in der App-Uebersicht
+	mkdir -p "$CONF" && echo "ediOS: Secure-Boot-Hinweis wurde angezeigt" > "$SHOWN"
+	z --question --title "$TITLE" --width 540 --ok-label "$(t "Schlüssel eintragen" "Enroll key")" --cancel-label "$(t "Später" "Later")" \
+		--text "$(t "<b>ediOS läuft gerade ohne Secure Boot.</b>\n\nDas ist in Ordnung. Wenn du Secure Boot im BIOS/UEFI wieder <b>einschalten</b> möchtest (z. B. für Windows 11 oder Spiele mit Anti-Cheat), muss vorher einmal der <b>ediOS-Schlüssel</b> eingetragen werden. Sonst startet ediOS mit Secure Boot nicht.\n\nDas dauert etwa eine Minute und einen Neustart.\n\n<small>Dieser Hinweis erscheint nur einmal. Später findest du alles in der App <b>Secure Boot</b> (App-Übersicht).</small>" \
+		"<b>ediOS is running without Secure Boot.</b>\n\nThat is fine. If you want to turn Secure Boot <b>on</b> again in the BIOS/UEFI (e.g. for Windows 11 or games with anti-cheat), the <b>ediOS key</b> has to be enrolled once first. Otherwise ediOS will not start with Secure Boot.\n\nThis takes about one minute and one restart.\n\n<small>This hint is shown only once. Later you can find everything in the <b>Secure Boot</b> app (app overview).</small>")" || exit 0
 	START_IMPORT=1
 else
 	ST="$(state)"

@@ -336,11 +336,13 @@ class Einrichtung(Adw.ApplicationWindow):
             self.wait_page(T("Die Sprache wird umgestellt …", "Switching the language …"))
             run_root(["live-neustart"])
             return
-        d = Adw.AlertDialog(heading=T("Neu anmelden", "Log in again"),
-                            body=T("Die neue Sprache gilt nach dem nächsten Anmelden. Danach geht es hier weiter.",
-                                   "The new language applies after you log in again. Setup continues afterwards."))
+        # Neustart statt Abmelden: Unter OpenRC startet GDM nach dem Abmelden keinen brauchbaren Anmeldebildschirm
+        # (bekannter Fehler seit 1.0, Loesung fuer 1.2 geplant); ein Neustart klappt immer.
+        d = Adw.AlertDialog(heading=T("Neu starten", "Restart"),
+                            body=T("Die neue Sprache gilt nach einem Neustart. Danach geht es hier weiter.",
+                                   "The new language applies after a restart. Setup continues afterwards."))
         d.add_response("later", T("Später", "Later"))
-        d.add_response("logout", T("Jetzt abmelden", "Log out now"))
+        d.add_response("logout", T("Jetzt neu starten", "Restart now"))
         d.set_response_appearance("logout", Adw.ResponseAppearance.SUGGESTED)
         d.set_default_response("logout")
         d.connect("response", self.on_logout_answer)
@@ -348,7 +350,7 @@ class Einrichtung(Adw.ApplicationWindow):
 
     def on_logout_answer(self, _d, resp):
         if resp == "logout":
-            subprocess.Popen(["gnome-session-quit", "--logout", "--no-prompt"])
+            subprocess.Popen(["gnome-session-quit", "--reboot", "--no-prompt"])
         else:
             self.go(2)
 

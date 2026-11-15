@@ -2,10 +2,10 @@
 # shellcheck shell=sh disable=SC2034
 
 # --- Version ---
-EDIOS_VERSION="1.0"                     # Anzeigename (os-release, motd, GRUB, Fenster)
-EDIOS_FILEVER="1.0"                     # fuer Dateinamen: out/edios-$EDIOS_FILEVER-x86_64.iso
-EDIOS_VOLID="EDIOS-1.0"                 # ISO-Datentraegername (GRUB sucht danach)
-EDIOS_PKGVER="1.0.0"                    # Version der ediOS-Pakete (packages/*/APKBUILD)
+EDIOS_VERSION="1.1"                     # Anzeigename (os-release, motd, GRUB, Fenster)
+EDIOS_FILEVER="1.1"                     # fuer Dateinamen: out/edios-$EDIOS_FILEVER-x86_64.iso
+EDIOS_VOLID="EDIOS-1.1"                 # ISO-Datentraegername (GRUB sucht danach)
+EDIOS_PKGVER="1.1.0"                    # Version der ediOS-Pakete (packages/*/APKBUILD)
 EDIOS_URL="https://github.com/edululilar-sketch/ediOS"
 EDIOS_REPO_URL="https://edululilar-sketch.github.io/edios-repo/v3.24/edios"
 
@@ -41,6 +41,9 @@ GRUB_SBAT_EDIOS=1
 # 1.0 neu: nftables (Firewall), doas-sudo-shim (Befehl "sudo" -> doas), tzdata (Zeitzonen), accountsservice
 # (Sprache je Benutzer), hunspell-en-us (Rechtschreibung Englisch), chrony (Uhrzeit aus dem Internet),
 # iproute2-ss (Befehl ss)
+# 1.1: GNOME Software (samt apk-Plugin) und LibreOffice sind nicht mehr dabei (Ersatz: "ediOS Apps", LibreOffice
+# dort als Flatpak). Neue Programme (Codecs, Schriften, Archive, NTFS/exFAT, MTP, Uebersetzungen, earlyoom,
+# openrc-settingsd) kommen ueber das Paket edios-system, damit sie auch per Update ankommen.
 PACKAGES="adwaita-fonts adwaita-fonts-mono adwaita-fonts-sans adwaita-icon-theme alpine-base alsa-utils
 alsa-utils-openrc amd-ucode avahi chrony chrony-openrc avahi-lang avahi-openrc bash bash-completion bluez bluez-openrc
 cups cups-filters cups-lang cups-openrc cups-pk-helper cups-pk-helper-lang curl dbus dbus-openrc
@@ -51,14 +54,12 @@ gnome-calculator gnome-calculator-lang gnome-control-center gnome-control-center
 gnome-desktop-lang gnome-disk-utility gnome-disk-utility-lang gnome-extensions-app gnome-keyring
 gnome-keyring-lang gnome-keyring-openrc gnome-online-accounts gnome-online-accounts-lang
 gnome-session-lang gnome-settings-daemon-lang gnome-shell gnome-shell-extensions
-gnome-shell-extensions-lang gnome-shell-lang gnome-software gnome-software-lang
-gnome-software-plugin-apk2 gnome-software-plugin-flatpak gnome-system-monitor
+gnome-shell-extensions-lang gnome-shell-lang gnome-system-monitor
 gnome-system-monitor-lang gnome-terminal gnome-terminal-lang gnome-text-editor
 gnome-text-editor-lang gnome-tweaks gnome-tweaks-lang accountsservice grub-efi gsettings-desktop-schemas
 gsettings-desktop-schemas-lang gst-thumbnailers gtk+3.0-lang gtk4.0-lang gvfs gvfs-lang gvfs-openrc
 htop hunspell hunspell-de-de iproute2-ss hunspell-en-us hunspell-lang iio-sensor-proxy iio-sensor-proxy-openrc
-intel-media-driver intel-ucode libadwaita-lang libnotify libreoffice-calc libreoffice-draw
-libreoffice-impress libreoffice-lang-de libreoffice-writer
+intel-media-driver intel-ucode libadwaita-lang libnotify
 localsearch localsearch-lang loupe
 loupe-lang mesa mesa-dri-gallium mesa-va-gallium mesa-vulkan-ati mesa-vulkan-intel mokutil
 musl-locales musl-locales-lang nano nautilus nautilus-lang networkmanager networkmanager-lang
@@ -75,7 +76,7 @@ xdg-user-dirs-lang xwayland zenity zenity-lang zram-init zram-init-openrc"
 
 # Eigene Pakete aus packages/ (lokales, signiertes Repo, Schluessel ~/ediOS-keys/edios-repo.rsa).
 # Update-Knopf, Einrichtung, Aussehen und Apps-Helfer kommen als Pakete (nicht aus dem Overlay).
-EDIOS_PACKAGES="edios-keyring edios-base edios-theme edios-apps edios-gdm-theme"
+EDIOS_PACKAGES="edios-keyring edios-system edios-base edios-theme edios-apps edios-gdm-theme"
 
 # Gruppen aus src/files.map, die (noch) im Overlay liegen (base/theme/apps sind Pakete).
 EDIOS_OVL_GROUPS="system live"

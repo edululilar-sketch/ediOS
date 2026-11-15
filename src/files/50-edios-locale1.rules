@@ -1,0 +1,9 @@
+// ediOS (GPL-3.0-or-later): Systemsprache und Tastatur stellt die ediOS-Einrichtung um (edios-sprache-root).
+// openrc-settingsd (fuer Zeitzone und Uhr in den GNOME-Einstellungen) bietet auch org.freedesktop.locale1 an,
+// schreibt dabei aber Dateien, die ediOS nicht liest (/etc/profile.d/locale.sh, X11). Darum hier gesperrt.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.locale1.set-locale" ||
+        action.id == "org.freedesktop.locale1.set-keyboard") {
+        return polkit.Result.NO;
+    }
+});

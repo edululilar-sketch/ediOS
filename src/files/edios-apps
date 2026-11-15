@@ -57,6 +57,8 @@ CATALOG = [
         ("org.blender.Blender", "Blender", "3D-Modelle, Animation und Effekte", "3D models, animation and effects"),
     ]),
     ("Werkzeuge", "Tools", "applications-utilities-symbolic", [
+        ("org.libreoffice.LibreOffice", "LibreOffice", "Texte, Tabellen und Präsentationen (öffnet auch Word, Excel, PowerPoint)",
+         "Documents, spreadsheets and presentations (also opens Word, Excel, PowerPoint)"),
         ("com.usebottles.bottles", "Bottles", "Windows-Programme unter Linux ausführen", "Run Windows programs on Linux"),
         ("com.github.tchx84.Flatseal", "Flatseal", "Rechte von Flatpak-Apps einstellen", "Manage permissions of Flatpak apps"),
         ("io.missioncenter.MissionCenter", "Mission Center", "Prozessor, Speicher und Grafikkarte im Blick", "Keep an eye on CPU, memory and graphics card"),

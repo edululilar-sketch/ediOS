@@ -1,0 +1,6 @@
+#!/bin/sh
+# Kopie nur entfernen, wenn sie unveraendert ist
+src=/usr/share/edios/zenity/org.gnome.Zenity.desktop
+dst=/usr/local/share/applications/org.gnome.Zenity.desktop
+cmp -s "$src" "$dst" 2>/dev/null && rm -f "$dst"
+exit 0

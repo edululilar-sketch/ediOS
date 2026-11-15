@@ -2,13 +2,13 @@
 # Sitzungs-Erweiterung (schnelles Ausschalten). Dateien und Ziele stehen in src/files.map (Gruppe "base");
 # build-repo.sh kopiert src/ nach $startdir/edios-src.
 pkgname=edios-base
-pkgver=1.0.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
+pkgver=1.1.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
 pkgrel=0
 pkgdesc="ediOS base (update tool, setup, language, terminal, session fix)"
 url="https://github.com/edululilar-sketch/ediOS"
 arch="noarch"
 license="GPL-3.0-or-later"
-depends="edios-keyring zenity libnotify polkit py3-gobject3 libadwaita gtk4.0 gnome-terminal util-linux-misc
+depends="edios-keyring edios-system glib zenity libnotify polkit py3-gobject3 libadwaita gtk4.0 gnome-terminal util-linux-misc
 	tzdata dconf"
 install="$pkgname.post-install $pkgname.post-upgrade $pkgname.pre-deinstall"
 options="!check"

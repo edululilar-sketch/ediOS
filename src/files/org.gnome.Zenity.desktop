@@ -1,0 +1,15 @@
+[Desktop Entry]
+# ediOS: ersetzt zenitys eigene Datei (ohne Icon=, darum leeres Symbol). Kopie aus /usr/share/edios/zenity/,
+# angelegt von edios-system (post-install). zenity zeigt die ediOS-Dialoge (Update, Secure Boot, Installer).
+Name=ediOS dialogs
+Name[de]=ediOS-Dialoge
+Comment=Dialogs of the ediOS tools
+Comment[de]=Dialogfenster der ediOS-Programme
+Exec=zenity
+Icon=edios-logo
+Terminal=false
+Type=Application
+NoDisplay=true
+StartupNotify=true
+DBusActivatable=true
+X-GNOME-UsesNotifications=true

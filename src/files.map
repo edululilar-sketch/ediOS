@@ -1,5 +1,5 @@
 # ediOS: wohin jede Datei aus src/ gehoert (GPL-3.0-or-later).  Gruppe  Rechte  Quelle(relativ zu src/)  Ziel
-# Gruppen: base / theme / apps  -> apk-Pakete edios-base / edios-theme / edios-apps
+# Gruppen: base / theme / apps / sys -> apk-Pakete edios-base / edios-theme / edios-apps / edios-system
 #          system               -> immer im Overlay (Secure Boot, Audio, VirtualBox, Einstellungen)
 #          live                 -> nur im Live-System (Installer, Live-Benutzer); der Installer entfernt die /etc-Teile
 # Benutzt von src/install-map.sh (Overlay und APKBUILDs).
@@ -40,8 +40,18 @@ theme	644	files/00-edios.ini				/etc/edios/dconf-src/00-edios.ini
 apps	755	files/edios-apps				/usr/bin/edios-apps
 apps	644	files/org.edios.Apps.desktop			/usr/share/applications/org.edios.Apps.desktop
 
+# --- sys: Paket edios-system (ab 1.1; kommt per Update auch zu installierten Systemen) ---
+sys	755	files/edios-secureboot				/usr/bin/edios-secureboot
+sys	644	files/70-edios-controller.rules			/usr/lib/udev/rules.d/70-edios-controller.rules
+sys	644	files/91-edios-spiele.conf			/usr/lib/sysctl.d/91-edios-spiele.conf
+sys	644	files/50-edios-locale1.rules			/usr/share/polkit-1/rules.d/50-edios-locale1.rules
+sys	644	files/edios-dialog.desktop			/usr/share/applications/edios-dialog.desktop
+sys	755	files/edios-migration				/etc/init.d/edios-migration
+sys	644	files/21edios-collate.sh			/etc/profile.d/21edios-collate.sh
+sys	644	files/org.gnome.Zenity.desktop		/usr/share/edios/zenity/org.gnome.Zenity.desktop
+sys	644	files/gnome-mimeapps.list			/usr/share/applications/gnome-mimeapps.list
+
 # --- system: Secure Boot ---
-system	755	files/edios-secureboot				/usr/bin/edios-secureboot
 system	755	files/edios-secureboot-root			/usr/libexec/edios-secureboot-root
 system	755	files/edios-kernel-hook				/usr/libexec/edios-kernel-hook
 system	755	files/edios-kernel-hook				/etc/apk/commit_hooks.d/edios-secureboot.sh

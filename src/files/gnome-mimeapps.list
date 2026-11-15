@@ -1,0 +1,4 @@
+# ediOS (GPL-3.0-or-later): Standard-Programme. Ohne diese Zeile oeffnete Firefox PDF-Dateien, weil es sie auch
+# anmeldet. Eigene Wahl ("Oeffnen mit" / Einstellungen > Anwendungen) geht immer vor.
+[Default Applications]
+application/pdf=org.gnome.Papers.desktop

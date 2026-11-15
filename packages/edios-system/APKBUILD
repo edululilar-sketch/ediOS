@@ -1,0 +1,63 @@
+# ediOS System (neu in 1.1): Programme und Einstellungen, die per Update auch zu schon installierten Systemen
+# kommen sollen. Dateien und Ziele stehen in src/files.map (Gruppe "sys"). edios-base haengt davon ab.
+#   - Dateien: Archive, NTFS/exFAT, Handys (MTP), Codecs, Schriften, alle Uebersetzungen (lang)
+#   - Spiele: Controller-Regeln, vm.max_map_count, earlyoom (Schutz vor vollem Arbeitsspeicher)
+#   - Zeitzone/Uhr in den GNOME-Einstellungen (openrc-settingsd), Secure-Boot-Hinweis, Dialog-Symbol
+#   - einmalige Umstellung nach dem Update (edios-migration), Versionsangabe in /etc/os-release
+pkgname=edios-system
+pkgver=1.1.0   # = EDIOS_PKGVER in config.sh (build/inner.sh prueft das)
+pkgrel=0
+_caladea_commit=bed55e0de5cfa8f5fb94f9a1f49409b5ec504469   # google/fonts (wie die Ubuntu-Schrift), Caladea 1.002
+pkgdesc="ediOS system (files, codecs, fonts, translations, games, time zone)"
+url="https://github.com/edululilar-sketch/ediOS"
+arch="noarch"
+license="GPL-3.0-or-later AND OFL-1.1 AND LGPL-2.1-or-later"
+depends="
+	lang
+	file-roller 7zip ntfs-3g exfatprogs gvfs-mtp
+	gst-libav gst-plugins-ugly gst-plugins-good gst-plugins-bad decibels
+	font-liberation font-carlito font-noto-emoji
+	earlyoom earlyoom-openrc openrc-settingsd openrc-settingsd-openrc
+	zenity mokutil openssl
+	"
+install="$pkgname.post-install $pkgname.post-upgrade $pkgname.pre-deinstall"
+options="!check"
+source="
+	caladea-Caladea-Regular.ttf::https://raw.githubusercontent.com/google/fonts/$_caladea_commit/ofl/caladea/Caladea-Regular.ttf
+	caladea-Caladea-Bold.ttf::https://raw.githubusercontent.com/google/fonts/$_caladea_commit/ofl/caladea/Caladea-Bold.ttf
+	caladea-Caladea-Italic.ttf::https://raw.githubusercontent.com/google/fonts/$_caladea_commit/ofl/caladea/Caladea-Italic.ttf
+	caladea-Caladea-BoldItalic.ttf::https://raw.githubusercontent.com/google/fonts/$_caladea_commit/ofl/caladea/Caladea-BoldItalic.ttf
+	caladea-OFL.txt::https://raw.githubusercontent.com/google/fonts/$_caladea_commit/ofl/caladea/OFL.txt
+	"
+
+package() {
+	local s="$startdir/edios-src"
+	sh "$s/install-map.sh" "$pkgdir" sys
+	# Versionsangabe (post-install kopiert sie nach /etc/os-release, nur auf ediOS)
+	mkdir -p "$pkgdir/usr/share/edios"
+	sed "s/@VERSION@/${pkgver%.*}/g; s|@URL@|$url|g" "$s/files/os-release.in" > "$pkgdir/usr/share/edios/os-release"
+	# Caladea: metrisch gleich wie Cambria (fontconfig ordnet sie in 30-metric-aliases.conf zu)
+	local f
+	for f in Regular Bold Italic BoldItalic; do
+		install -Dm644 "$srcdir/caladea-Caladea-$f.ttf" "$pkgdir/usr/share/fonts/caladea/Caladea-$f.ttf"
+	done
+	install -Dm644 "$srcdir/caladea-OFL.txt" "$pkgdir/usr/share/licenses/font-caladea/OFL.txt"
+	# Deutsche Sprach-/Laendernamen (iso-codes 4.20.1): Alpines iso-codes-lang enthaelt nur Verweise wie
+	# iso_639.mo -> iso_639-2.mo, die Zieldateien fehlen. Hier genau diese Ziele (siehe src/iso-codes-de/LIESMICH.txt).
+	local po d
+	for po in "$s"/iso-codes-de/*.de.po; do
+		d="${po##*/}"; d="${d%.de.po}"
+		mkdir -p "$pkgdir/usr/share/locale/de/LC_MESSAGES"
+		msgfmt -o "$pkgdir/usr/share/locale/de/LC_MESSAGES/$d.mo" "$po"
+	done
+	install -Dm644 "$s/iso-codes-de/LGPL-2.1-or-later.txt" "$pkgdir/usr/share/licenses/edios-iso-codes-de/LGPL-2.1-or-later.txt"
+	install -Dm644 "$s/iso-codes-de/LIESMICH.txt" "$pkgdir/usr/share/licenses/edios-iso-codes-de/LIESMICH.txt"
+}
+
+sha512sums="
+02c525094617e18c66dc2702171b53bf38b1615f1714b72d201a747a040254e0022131a497671ca49aa4b84a419b2d5aee88e4c5414e4ed6949c803f943da4e4  caladea-Caladea-Regular.ttf
+ddc24bdf5b2346adb04e727f1873057bdd894ca98b280a4d2bea3f2157a8d4a7250bc5a39d0e93fd12e96143f66af94e5ecd330afe10b475c09e56691c34dd46  caladea-Caladea-Bold.ttf
+1467cc28dd5d3ba8d95f5e0651aabf78c7c3703c76856901c871292325e73d5201b98ee106fdc68ce7804acae42153dc9f0254f5974b63f244633677c5c5f6e5  caladea-Caladea-Italic.ttf
+df49ee066cc348e4083714e6a2c75d5cdfaaabaf35a9ee5ad75bcb458c7b9e18f732c6777f9711001c9b115213bcb1fce22d847aae0ca32fd2a0322b5cb966de  caladea-Caladea-BoldItalic.ttf
+837edcaa89244db05155521eefc61367b84a823325682611461b6d729a606b3c1649c9933cd40b5406880db066b7e6137302ab6ab632485a82fa1ee906384ca4  caladea-OFL.txt
+"

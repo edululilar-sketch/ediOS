@@ -22,7 +22,7 @@ license and source.
 | Mesa (Grafiktreiber / graphics drivers) | 26.1 | MIT | https://mesa3d.org |
 | linux-firmware (WLAN, Bluetooth, Grafik / Wi-Fi, Bluetooth, graphics) | 20260519 | je Datei, siehe `WHENCE` / per file | https://gitlab.com/kernel-firmware/linux-firmware |
 | Firefox | Alpine 3.24 | MPL-2.0 | https://www.mozilla.org/firefox/ |
-| LibreOffice | Alpine 3.24 | MPL-2.0 | https://www.libreoffice.org |
+| LibreOffice (ab 1.1 nicht mehr auf der ISO; im Apps-Helfer als Flatpak, installiert der Benutzer selbst / since 1.1 not on the ISO; offered as Flatpak in the apps helper, installed by the user) | Flathub | MPL-2.0 | https://www.libreoffice.org |
 | Flatpak (Apps von Flathub installiert der Benutzer selbst / apps from Flathub are installed by the user) | Alpine 3.24 | LGPL-2.1-or-later | https://flatpak.org, https://flathub.org |
 | doas, doas-sudo-shim (`sudo` → `doas`) | Alpine 3.24 | ISC | https://github.com/Duncaen/OpenDoas, https://github.com/jirutka/doas-sudo-shim |
 | nftables (Firewall) | 1.1.6 | GPL-2.0-only | https://netfilter.org/projects/nftables/ |
@@ -39,8 +39,24 @@ license and source.
 | OpenDyslexic (Schrift / font) | v0.91.12 | SIL Open Font License 1.1 | https://github.com/antijingoist/opendyslexic |
 | hyfetch / neowofetch | 2.1.0 | MIT | https://github.com/hykilpikonna/hyfetch |
 
+## Über das Paket `edios-system` nachgezogene Alpine-Pakete (Auswahl) / Alpine packages pulled in by `edios-system` (selection)
+
+| Teil / Part | Version | Lizenz / License | Quelle / Source |
+|---|---|---|---|
+| GStreamer libav (FFmpeg) und / and gst-plugins-ugly (u. a. H.264/H.265-Dekoder; Patente je nach Land / patents depend on the country) | Alpine 3.24 | LGPL-2.1-or-later / GPL-2.0-or-later | https://gstreamer.freedesktop.org, https://ffmpeg.org |
+| 7-Zip (enthält unRAR-Code mit eigener Lizenzbedingung / contains unRAR code with its own license restriction) | 26.01 | LGPL-2.1 + unRAR-Einschränkung / restriction | https://7-zip.org |
+| Decibels (Musik / music) | Alpine 3.24 | GPL-3.0-or-later | https://gitlab.gnome.org/GNOME/Incubator/decibels |
+| earlyoom, openrc-settingsd, ntfs-3g, exfatprogs, file-roller, gvfs-mtp, Liberation/Carlito-Schriften / fonts | Alpine 3.24 | je Paket / per package | Alpine aports |
+
+## Im Paket `edios-system` mitgeliefert (ab 1.1) / Shipped in the `edios-system` package (since 1.1)
+
+| Teil / Part | Version | Lizenz / License | Quelle / Source |
+|---|---|---|---|
+| Caladea (Schrift, metrisch gleich wie Cambria / font, metric-compatible with Cambria; unverändert / unmodified) | 1.002, google/fonts Commit `bed55e0d` | SIL Open Font License 1.1 | https://github.com/google/fonts/tree/main/ofl/caladea |
+| iso-codes, deutsche Übersetzungen (Sprach-/Ländernamen; unverändert, nur mit `msgfmt` übersetzt / German translations of language and country names; unmodified, only compiled with `msgfmt`) | 4.20.1 | LGPL-2.1-or-later | https://salsa.debian.org/iso-codes-team/iso-codes |
+
 Die Lizenztexte der Schriften liegen im System unter `/usr/share/licenses/ubuntu-font/` und
-`/usr/share/licenses/opendyslexic/`. / The font license texts are installed in `/usr/share/licenses/`.
+`/usr/share/licenses/opendyslexic/`, ab 1.1 auch `/usr/share/licenses/font-caladea/` und `/usr/share/licenses/edios-iso-codes-de/`. / The font license texts are installed in `/usr/share/licenses/`.
 
 Hinweis zu Marken / Note on trademarks: „Ubuntu“ ist eine Marke von Canonical Ltd. ediOS verwendet die
 unveränderte Schrift „Ubuntu“ (erlaubt durch die Ubuntu Font Licence) und den freien GTK-Stil Yaru, aber

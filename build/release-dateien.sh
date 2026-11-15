@@ -1,6 +1,6 @@
 #!/bin/sh
 # ediOS: Dateien fuer ein GitHub-Release vorbereiten (GPL-3.0-or-later).
-#   build/release-dateien.sh            -> out/release/
+#   build/release-dateien.sh            -> out/release-<Version>/  (ab 1.1 je Version ein eigener Ordner)
 # Inhalt: ISO, SHA256SUMS (ISO + oeffentliche Schluessel), SHA256SUMS.sig (signiert mit ~/ediOS-keys/edios-repo.rsa,
 # pruefbar mit dem oeffentlichen edios-repo.rsa.pub), edios-mok.der/.crt (Secure-Boot-Zertifikat), LIESMICH/README.
 # Pruefen:  openssl dgst -sha256 -verify edios-repo.rsa.pub -signature SHA256SUMS.sig SHA256SUMS
@@ -9,7 +9,7 @@ P="$(cd "$(dirname "$0")/.." && pwd)"
 . "$P/config.sh"
 KEYS="${EDIOS_KEYS:-$HOME/ediOS-keys}"
 ISO="edios-$EDIOS_FILEVER-x86_64.iso"
-R="$P/out/release"
+R="$P/out/release-$EDIOS_FILEVER"
 [ -f "$P/out/$ISO" ] || { echo "out/$ISO fehlt (erst ./build.sh)" >&2; exit 1; }
 [ -f "$KEYS/edios-repo.rsa" ] || { echo "$KEYS/edios-repo.rsa fehlt" >&2; exit 1; }
 cmp -s "$KEYS/edios-repo.rsa.pub" "$P/src/pubkeys/edios-repo.rsa.pub" || { echo "Schluessel passt nicht zu src/pubkeys" >&2; exit 1; }
